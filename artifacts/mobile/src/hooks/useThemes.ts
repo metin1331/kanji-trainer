@@ -18,7 +18,16 @@ import type {
 } from "@workspace/api-client-react";
 import { apiFetch } from "@/lib/apiFetch";
 
+function normalizeIconSvg(iconSvg?: string | null): string | null {
+  if (iconSvg == null) return null;
+  const trimmed = iconSvg.trim();
+  return trimmed || null;
+}
+
 export type { ThemeSummary, ThemeDetail };
+
+type ThemeInputWithIcon = ThemeInput & { iconSvg?: string | null };
+type ThemeUpdateWithIcon = ThemeUpdate & { iconSvg?: string | null };
 
 export function useThemes() {
   const queryClient = useQueryClient();
@@ -35,13 +44,14 @@ export function useThemes() {
     themes: (listQuery.data ?? []) as ThemeSummary[],
     isLoading: listQuery.isLoading,
     isError: listQuery.isError,
-    createTheme: async (data: ThemeInput) => {
+    createTheme: async (data: ThemeInputWithIcon) => {
       const res = await apiFetch("/api/themes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: data.name.trim(),
           wordIds: data.wordIds ?? [],
+          iconSvg: normalizeIconSvg(data.iconSvg),
         }),
       });
       if (!res.ok) throw new Error("Failed to create theme");
@@ -49,13 +59,16 @@ export function useThemes() {
       invalidateList();
       return theme as ThemeDetail;
     },
-    updateTheme: async (id: number, data: ThemeUpdate) => {
+    updateTheme: async (id: number, data: ThemeUpdateWithIcon) => {
       const res = await apiFetch(`/api/themes/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...data,
           ...(data.name !== undefined ? { name: data.name.trim() } : {}),
+          ...(data.iconSvg !== undefined
+            ? { iconSvg: normalizeIconSvg(data.iconSvg) }
+            : {}),
         }),
       });
       if (!res.ok) throw new Error("Failed to update theme");
@@ -104,13 +117,16 @@ export function useTheme(id: number) {
     theme: query.data as ThemeDetail | undefined,
     isLoading: query.isLoading,
     isError: query.isError,
-    updateTheme: async (data: ThemeUpdate) => {
+    updateTheme: async (data: ThemeUpdateWithIcon) => {
       const res = await apiFetch(`/api/themes/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...data,
           ...(data.name !== undefined ? { name: data.name.trim() } : {}),
+          ...(data.iconSvg !== undefined
+            ? { iconSvg: normalizeIconSvg(data.iconSvg) }
+            : {}),
         }),
       });
       if (!res.ok) throw new Error("Failed to update theme");

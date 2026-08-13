@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   Dimensions,
+  Keyboard,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -35,6 +37,8 @@ type Props = {
   scrollable?: boolean;
   /** Give the sheet an explicit height (from maxHeight) so flex children can fill it. */
   expanded?: boolean;
+  /** Move the sheet above the software keyboard (for forms with inputs). */
+  keyboardAware?: boolean;
 };
 
 function resolveSheetHeight(
@@ -60,6 +64,7 @@ export function SlideUpModal({
   inline = false,
   scrollable = false,
   expanded = false,
+  keyboardAware = false,
 }: Props) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
@@ -68,6 +73,7 @@ export function SlideUpModal({
   const [mounted, setMounted] = useState(visible);
   const translateY = useSharedValue(SCREEN_HEIGHT);
   const backdropOpacity = useSharedValue(0);
+  const keyboardOffset = useSharedValue(0);
 
   const sheetPixelHeight = resolveSheetHeight(maxHeight, bottomInset);
 
@@ -102,6 +108,35 @@ export function SlideUpModal({
     }
   }, [visible, mounted, animateIn, animateOut]);
 
+  useEffect(() => {
+    if (!keyboardAware || !mounted) return;
+
+    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+
+    const onShow = Keyboard.addListener(showEvent, (event) => {
+      keyboardOffset.value = withTiming(event.endCoordinates.height, {
+        duration: event.duration ?? 250,
+      });
+    });
+    const onHide = Keyboard.addListener(hideEvent, (event) => {
+      keyboardOffset.value = withTiming(0, {
+        duration: Platform.OS === "ios" ? (event.duration ?? 250) : 220,
+      });
+    });
+
+    return () => {
+      onShow.remove();
+      onHide.remove();
+    };
+  }, [keyboardAware, mounted, keyboardOffset]);
+
+  useEffect(() => {
+    if (!visible) {
+      keyboardOffset.value = 0;
+    }
+  }, [visible, keyboardOffset]);
+
   const requestClose = useCallback(() => {
     onClose();
   }, [onClose]);
@@ -126,6 +161,10 @@ export function SlideUpModal({
 
   const sheetStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: translateY.value }],
+  }));
+
+  const sheetHostStyle = useAnimatedStyle(() => ({
+    bottom: bottomInset + keyboardOffset.value,
   }));
 
   if (!mounted) return null;
@@ -199,12 +238,16 @@ export function SlideUpModal({
     <Modal visible={mounted} transparent animationType="none" onRequestClose={requestClose}>
       <View style={styles.modalRoot}>
         {backdrop}
-        <View
-          style={[styles.sheetHost, bottomInset > 0 && { bottom: bottomInset }]}
+        <Animated.View
+          style={[
+            styles.sheetHost,
+            bottomInset > 0 && !keyboardAware ? { bottom: bottomInset } : null,
+            keyboardAware ? sheetHostStyle : null,
+          ]}
           pointerEvents="box-none"
         >
           {sheet}
-        </View>
+        </Animated.View>
       </View>
     </Modal>
   );

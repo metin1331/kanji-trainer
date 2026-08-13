@@ -9,7 +9,7 @@ import {
 } from "react-native";
 import { ArrowLeft, ArrowUpDown, Dices } from "lucide-react-native";
 import { useRouter } from "expo-router";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { ScreenShell, useScreenHeaderInset } from "@/components/ScreenShell";
 import type { Word } from "@/lib/types";
 import { filterWords, filterByJlptLevels } from "@/lib/filterWords";
 import { confirmAsync } from "@/lib/confirm";
@@ -25,6 +25,8 @@ import { startStudy, type StudyMode } from "@/lib/studyStore";
 import { usePinnedWords } from "@/hooks/usePinnedWords";
 import { useTranslation } from "@/i18n/I18nProvider";
 import { useTheme } from "@/theme/ThemeProvider";
+import { CategoryTitle } from "./CategoryIcon";
+import { navBackTitleStyle } from "@/theme/screenNavStyles";
 import { ListSortSheet } from "./ListSortSheet";
 import { LoadingSpinner } from "./LoadingSpinner";
 import { LoadingPlaceholder } from "./LoadingPlaceholder";
@@ -47,11 +49,16 @@ type Props = {
   onUpdate?: (id: number, patch: Partial<Word>) => void;
   onDelete?: (id: number) => void;
   onDeleteMany?: (ids: number[]) => Promise<void>;
+  bulkMode?: "delete" | "remove";
+  onBulkRemove?: (ids: number[]) => Promise<void>;
+  bulkRemoveLabel?: string;
   onEditSave?: (id: number, data: WordFormSaveData) => void;
   showDice?: boolean;
   studyTitle?: string;
   studyReturnPath?: string;
   toolbarExtra?: ReactNode;
+  iconSvg?: string | null;
+  /** @deprecated Use iconSvg instead */
   pageTitleIcon?: ReactNode;
   onBack?: () => void;
   allWords?: Word[];
@@ -97,11 +104,15 @@ export function WordListPanel({
   onUpdate,
   onDelete,
   onDeleteMany,
+  bulkMode = "delete",
+  onBulkRemove,
+  bulkRemoveLabel,
   onEditSave,
   showDice = true,
   studyTitle,
   studyReturnPath,
   toolbarExtra,
+  iconSvg,
   pageTitleIcon,
   onBack,
   allWords: allWordsProp,
@@ -109,6 +120,7 @@ export function WordListPanel({
   const { t } = useTranslation();
   const { theme, colorScheme } = useTheme();
   const router = useRouter();
+  const headerInset = useScreenHeaderInset();
   const styles = useMemo(() => createStyles(theme, colorScheme), [theme, colorScheme]);
 
   const isWordsMode = mode === "words";
@@ -239,18 +251,42 @@ export function WordListPanel({
     [words, t, onDelete],
   );
 
-  const handleBulkDelete = useCallback(async () => {
-    if (selectedIds.size === 0 || !onDeleteMany) return;
+  const handleBulkAction = useCallback(async () => {
+    if (selectedIds.size === 0) return;
+    const ids = [...selectedIds];
+
+    if (bulkMode === "remove" && onBulkRemove) {
+      const ok = await confirmAsync(
+        t("common.confirmTitle"),
+        t("themes.confirmRemoveWords", { count: ids.length }),
+        bulkRemoveLabel ?? t("themes.removeFromTheme"),
+        t("common.cancel"),
+      );
+      if (!ok) return;
+      await onBulkRemove(ids);
+      exitSelectMode();
+      return;
+    }
+
+    if (!onDeleteMany) return;
     const ok = await confirmAsync(
       t("common.confirmTitle"),
-      t("common.confirmBulkDelete", { count: selectedIds.size }),
+      t("common.confirmBulkDelete", { count: ids.length }),
       t("common.delete"),
       t("common.cancel"),
     );
     if (!ok) return;
-    await onDeleteMany([...selectedIds]);
+    await onDeleteMany(ids);
     exitSelectMode();
-  }, [selectedIds, onDeleteMany, t, exitSelectMode]);
+  }, [
+    selectedIds,
+    bulkMode,
+    onBulkRemove,
+    bulkRemoveLabel,
+    onDeleteMany,
+    t,
+    exitSelectMode,
+  ]);
 
   const handlePinSelected = useCallback(() => {
     togglePinMany([...selectedIds]);
@@ -292,7 +328,7 @@ export function WordListPanel({
   );
 
   const listHeader = (
-    <View style={styles.headerBlock}>
+    <View style={[styles.headerBlock, { paddingTop: headerInset }]}>
       <View style={styles.topRow}>
         <Pressable
           onPress={onBack ?? (() => router.back())}
@@ -300,10 +336,16 @@ export function WordListPanel({
         >
           <ArrowLeft size={18} color={theme.appTextMuted} />
           <View style={styles.titleRow}>
-            {pageTitleIcon}
-            <Text style={styles.backTitle} numberOfLines={1}>
-              {title}
-            </Text>
+            {pageTitleIcon == null ? (
+              <CategoryTitle name={title} iconSvg={iconSvg} iconSize={14} tone="nav" />
+            ) : (
+              <>
+                {pageTitleIcon}
+                <Text style={styles.backTitle} numberOfLines={1}>
+                  {title}
+                </Text>
+              </>
+            )}
           </View>
         </Pressable>
         <View style={styles.topRowActions}>
@@ -446,7 +488,7 @@ export function WordListPanel({
   );
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
+    <ScreenShell statusBarColor={theme.appSurface}>
       {listContent}
       {selectMode ? (
         <SelectActionBar
@@ -455,7 +497,12 @@ export function WordListPanel({
             setSelectedIds(new Set(displayed.map((w) => w.id)))
           }
           onPin={handlePinSelected}
-          onDelete={handleBulkDelete}
+          onDelete={handleBulkAction}
+          deleteLabel={
+            bulkMode === "remove"
+              ? (bulkRemoveLabel ?? t("themes.removeFromTheme"))
+              : undefined
+          }
         />
       ) : null}
       <ListSortSheet
@@ -500,12 +547,11 @@ export function WordListPanel({
           }}
         />
       ) : null}
-    </SafeAreaView>
+    </ScreenShell>
   );
 }
 
 function createStyles(theme: ReturnType<typeof useTheme>["theme"], colorScheme: ColorScheme) {
-  const isDark = colorScheme === "dark";
   return StyleSheet.create({
     safe: {
       flex: 1,
@@ -522,7 +568,6 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"], colorScheme: 
       borderBottomWidth: StyleSheet.hairlineWidth,
       borderBottomColor: theme.appBorderStrong,
       paddingHorizontal: 16,
-      paddingTop: 16,
       paddingBottom: 16,
       gap: 8,
     },
@@ -562,13 +607,7 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"], colorScheme: 
       gap: 4,
       flexShrink: 0,
     },
-    backTitle: {
-      fontSize: 11,
-      fontWeight: "600",
-      letterSpacing: 1.5,
-      textTransform: "uppercase",
-      color: isDark ? theme.main600 : theme.main500,
-    },
+    backTitle: navBackTitleStyle(theme, colorScheme),
     toolbarRow: {
       flexDirection: "row",
       alignItems: "center",

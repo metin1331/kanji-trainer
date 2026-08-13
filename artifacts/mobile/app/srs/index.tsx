@@ -20,7 +20,7 @@ import {
   PenTool,
   Waves,
 } from "lucide-react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { ScreenShell } from "@/components/ScreenShell";
 import { DailyGoalCard } from "@/components/DailyGoalCard";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { LoadingPlaceholder } from "@/components/LoadingPlaceholder";
@@ -30,6 +30,8 @@ import { srsDeckLabel } from "@/i18n/srsDeckLabels";
 import { startSrsSession } from "@/lib/srsStore";
 import { useTranslation } from "@/i18n/I18nProvider";
 import { useTheme } from "@/theme/ThemeProvider";
+import { navBackTitleStyle } from "@/theme/screenNavStyles";
+import { ColorScheme } from "@/settings/appSettings";
 import { JLPT_LEVELS, SRS_DECK_ORDER, type SrsDeckType, type SrsSortMode } from "@/types/srs";
 
 const DECK_ICONS = {
@@ -65,8 +67,8 @@ function sortLabelKey(mode: SrsSortMode): string {
 export default function SrsHubScreen() {
   const { t } = useTranslation();
   const router = useRouter();
-  const { theme } = useTheme();
-  const styles = useMemo(() => createStyles(theme), [theme]);
+  const { theme, colorScheme } = useTheme();
+  const styles = useMemo(() => createStyles(theme, colorScheme), [theme, colorScheme]);
   const { data: decks = [], isLoading } = useSrsDecks();
   const sync = useSrsSync();
   const { data: troubleCount = 0, isLoading: troubleLoading } = useTroubleWordCount();
@@ -122,14 +124,17 @@ export default function SrsHubScreen() {
   const allJlptActive = selectedJlpt.size === 0;
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()} style={styles.backRow}>
+    <ScreenShell
+      header={
+        <Pressable
+          onPress={() => router.back()}
+          style={({ pressed }) => [styles.backRow, pressed && { opacity: 0.7 }]}
+        >
           <ArrowLeft size={18} color={theme.appTextMuted} />
           <Text style={styles.backTitle}>{t("nav.srs")}</Text>
         </Pressable>
-      </View>
-
+      }
+    >
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.title}>{t("srs.hub.title")}</Text>
         <Text style={styles.subtitle}>{t("srs.hub.subtitle")}</Text>
@@ -277,28 +282,24 @@ export default function SrsHubScreen() {
           <ChevronRight size={18} color={theme.appTextMuted} />
         </Pressable>
       </ScrollView>
-    </SafeAreaView>
+    </ScreenShell>
   );
 }
 
-function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
+function createStyles(
+  theme: ReturnType<typeof useTheme>["theme"],
+  colorScheme: ColorScheme,
+) {
   return StyleSheet.create({
     safe: { flex: 1, backgroundColor: theme.appBg },
-    header: {
-      backgroundColor: theme.appSurface,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: theme.appBorder,
-      paddingHorizontal: 16,
-      paddingVertical: 12,
+    backRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      padding: 4,
+      marginLeft: -4,
     },
-    backRow: { flexDirection: "row", alignItems: "center", gap: 6, padding: 4 },
-    backTitle: {
-      fontSize: 11,
-      fontWeight: "600",
-      letterSpacing: 1.2,
-      textTransform: "uppercase",
-      color: theme.main400,
-    },
+    backTitle: navBackTitleStyle(theme, colorScheme, { letterSpacing: 1.2 }),
     content: { padding: 16, paddingBottom: 40, gap: 16 },
     title: { fontSize: 22, fontWeight: "700", color: theme.appText },
     subtitle: { fontSize: 14, color: theme.appTextSecondary, marginTop: -8 },

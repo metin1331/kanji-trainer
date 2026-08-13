@@ -10,6 +10,7 @@ type Props = {
   onSelectAll: () => void;
   onPin: () => void;
   onDelete: () => void;
+  deleteLabel?: string;
 };
 
 export function SelectActionBar({
@@ -17,6 +18,7 @@ export function SelectActionBar({
   onSelectAll,
   onPin,
   onDelete,
+  deleteLabel,
 }: Props) {
   const { t } = useTranslation();
   const { theme } = useTheme();
@@ -48,7 +50,7 @@ export function SelectActionBar({
         style={[styles.actionBtn, styles.deleteBtn, disabled && styles.disabled]}
       >
         <Trash2 size={14} color={theme.danger} />
-        <Text style={styles.deleteText}>{t("common.delete")}</Text>
+        <Text style={styles.deleteText}>{deleteLabel ?? t("common.delete")}</Text>
       </Pressable>
     </View>
   );

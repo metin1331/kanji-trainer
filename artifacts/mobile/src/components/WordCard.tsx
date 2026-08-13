@@ -153,16 +153,20 @@ export function WordCard({
             ) : null}
           </View>
         ) : (
-          <Text style={styles.index}>{index}</Text>
+          <Text style={styles.index} numberOfLines={1}>
+            {index}
+          </Text>
         )}
 
         {!selectMode ? (
-          <LevelChart
-            level={level}
-            starred={starred}
-            onChangeLevel={handleLevelChange}
-            onToggleStar={handleStarToggle}
-          />
+          <View style={styles.levelChartWrap}>
+            <LevelChart
+              level={level}
+              starred={starred}
+              onChangeLevel={handleLevelChange}
+              onToggleStar={handleStarToggle}
+            />
+          </View>
         ) : (
           <View style={styles.levelSpacer} />
         )}
@@ -175,12 +179,21 @@ export function WordCard({
                 setShowStroke(true);
               }}
               hitSlop={4}
-              style={({ pressed }) => pressed && { opacity: 0.7 }}
+              style={({ pressed }) => [
+                styles.kanjiCell,
+                pressed && { opacity: 0.7 },
+              ]}
             >
-              <Text style={styles.kanjiClickable}>{word.kanji}</Text>
+              <Text style={styles.kanjiClickable} numberOfLines={1}>
+                {word.kanji}
+              </Text>
             </Pressable>
           ) : (
-            <Text style={styles.kanji}>{word.kanji || "—"}</Text>
+            <View style={styles.kanjiCell}>
+              <Text style={styles.kanji} numberOfLines={1}>
+                {word.kanji || "—"}
+              </Text>
+            </View>
           )
         ) : mode === "pronunciation" ? (
           word.pronunciation ? (
@@ -372,12 +385,16 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
     index: {
       marginBottom: 1,
       alignSelf: "flex-end",
-      width: 20,
+      minWidth: 20,
+      flexShrink: 0,
       textAlign: "right",
       fontSize: 14,
       fontWeight: "500",
       color: theme.appTextMuted,
       fontVariant: ["tabular-nums"],
+    },
+    levelChartWrap: {
+      flexShrink: 0,
     },
     checkbox: {
       width: 20,
@@ -399,6 +416,11 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
     },
     levelSpacer: {
       width: 20,
+      flexShrink: 0,
+    },
+    kanjiCell: {
+      flexShrink: 1,
+      minWidth: 0,
     },
     kanji: {
       fontSize: 18,
@@ -426,6 +448,7 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
       color: theme.appTextMuted,
     },
     jlptBadge: {
+      flexShrink: 0,
       backgroundColor: theme.appMuted,
       borderRadius: 6,
       paddingHorizontal: 6,
@@ -438,6 +461,7 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
     },
     actions: {
       flexDirection: "row",
+      flexShrink: 0,
       marginLeft: "auto",
       gap: 2,
     },

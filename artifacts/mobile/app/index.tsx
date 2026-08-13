@@ -242,70 +242,72 @@ export default function HomeScreen() {
         style={styles.flex}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        <HomeHeader {...headerProps} />
-
         {isSearching ? (
-          isLoading ? (
-            <LoadingPlaceholder style={styles.flex} />
-          ) : results.length === 0 ? (
-            <ScrollView
-              keyboardShouldPersistTaps="never"
-              style={styles.flex}
-              contentContainerStyle={styles.flexGrow}
-            >
-              <View style={styles.center}>
-                <Text style={styles.emptyIcon}>?</Text>
-                <Text style={styles.emptyText}>
-                  {t("common.noResultsForQuery", { query: query.trim() })}
-                </Text>
-              </View>
-            </ScrollView>
-          ) : (
-            <FlatList
-              data={results}
-              keyExtractor={(item) => String(item.id)}
-              ListHeaderComponent={
-                <Text style={styles.resultCount}>
-                  {t("common.resultCount", { count: results.length })}
-                </Text>
-              }
-              renderItem={({ item }) => (
-                <SearchResultItem
-                  word={item}
-                  allWords={words}
-                  isOpen={openIds.has(item.id)}
-                  isRelatedOpen={relatedOpenIds.has(item.id)}
-                  onToggle={() => {
-                    setOpenIds((prev) => {
-                      const next = new Set(prev);
-                      if (next.has(item.id)) next.delete(item.id);
-                      else next.add(item.id);
-                      return next;
-                    });
-                  }}
-                  onToggleRelated={() => {
-                    setRelatedOpenIds((prev) => {
-                      const next = new Set(prev);
-                      if (next.has(item.id)) next.delete(item.id);
-                      else next.add(item.id);
-                      return next;
-                    });
-                  }}
-                  onEdit={handleEdit}
-                  onDelete={handleDelete}
-                />
-              )}
-              keyboardShouldPersistTaps="never"
-              style={styles.flex}
-              contentContainerStyle={styles.listContent}
-            />
-          )
+          <>
+            <HomeHeader {...headerProps} />
+            {isLoading ? (
+              <LoadingPlaceholder style={styles.flex} />
+            ) : results.length === 0 ? (
+              <ScrollView
+                keyboardShouldPersistTaps="never"
+                style={styles.flex}
+                contentContainerStyle={styles.flexGrow}
+              >
+                <View style={styles.center}>
+                  <Text style={styles.emptyIcon}>?</Text>
+                  <Text style={styles.emptyText}>
+                    {t("common.noResultsForQuery", { query: query.trim() })}
+                  </Text>
+                </View>
+              </ScrollView>
+            ) : (
+              <FlatList
+                data={results}
+                keyExtractor={(item) => String(item.id)}
+                ListHeaderComponent={
+                  <Text style={styles.resultCount}>
+                    {t("common.resultCount", { count: results.length })}
+                  </Text>
+                }
+                renderItem={({ item }) => (
+                  <SearchResultItem
+                    word={item}
+                    allWords={words}
+                    isOpen={openIds.has(item.id)}
+                    isRelatedOpen={relatedOpenIds.has(item.id)}
+                    onToggle={() => {
+                      setOpenIds((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(item.id)) next.delete(item.id);
+                        else next.add(item.id);
+                        return next;
+                      });
+                    }}
+                    onToggleRelated={() => {
+                      setRelatedOpenIds((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(item.id)) next.delete(item.id);
+                        else next.add(item.id);
+                        return next;
+                      });
+                    }}
+                    onEdit={handleEdit}
+                    onDelete={handleDelete}
+                  />
+                )}
+                keyboardShouldPersistTaps="never"
+                style={styles.flex}
+                contentContainerStyle={styles.listContent}
+              />
+            )}
+          </>
         ) : (
           <ScrollView
             keyboardShouldPersistTaps="never"
             style={styles.flex}
             contentContainerStyle={styles.homeScrollContent}
           >
+            <HomeHeader {...headerProps} />
             <View style={styles.linksSection}>
               <Text style={styles.sectionLabel}>{t("home.studySection")}</Text>
               <View style={styles.links}>

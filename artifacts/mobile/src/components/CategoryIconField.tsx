@@ -7,9 +7,14 @@ import { CategoryIcon } from "./CategoryIcon";
 type Props = {
   value: string;
   onChange: (value: string) => void;
+  namespace?: "categories" | "themes";
 };
 
-export function CategoryIconField({ value, onChange }: Props) {
+export function CategoryIconField({
+  value,
+  onChange,
+  namespace = "categories",
+}: Props) {
   const { t } = useTranslation();
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
@@ -17,13 +22,13 @@ export function CategoryIconField({ value, onChange }: Props) {
   return (
     <View style={styles.wrap}>
       <Text style={styles.label}>
-        {t("categories.iconLabel")}{" "}
-        <Text style={styles.optional}>{t("categories.iconOptional")}</Text>
+        {t(`${namespace}.iconLabel`)}{" "}
+        <Text style={styles.optional}>{t(`${namespace}.iconOptional`)}</Text>
       </Text>
       <TextInput
         value={value}
         onChangeText={onChange}
-        placeholder={t("categories.iconPlaceholder")}
+        placeholder={t(`${namespace}.iconPlaceholder`)}
         placeholderTextColor={theme.appTextMuted}
         multiline
         textAlignVertical="top"
@@ -33,7 +38,7 @@ export function CategoryIconField({ value, onChange }: Props) {
       />
       {value.trim() ? (
         <View style={styles.preview}>
-          <Text style={styles.previewLabel}>{t("categories.iconPreview")}</Text>
+          <Text style={styles.previewLabel}>{t(`${namespace}.iconPreview`)}</Text>
           <CategoryIcon svg={value} size={24} color={theme.appText} />
         </View>
       ) : null}

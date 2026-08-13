@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Alert, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter, type Href } from "expo-router";
 import { ArrowLeft, ChevronRight } from "lucide-react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { ScreenShell } from "@/components/ScreenShell";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { LoadingPlaceholder } from "@/components/LoadingPlaceholder";
 import {
@@ -14,13 +14,15 @@ import { srsDeckLabel } from "@/i18n/srsDeckLabels";
 import { startSrsSession } from "@/lib/srsStore";
 import { useTranslation } from "@/i18n/I18nProvider";
 import { useTheme } from "@/theme/ThemeProvider";
+import { navBackTitleStyle } from "@/theme/screenNavStyles";
+import { ColorScheme } from "@/settings/appSettings";
 import type { SrsDeckType } from "@/types/srs";
 
 export default function TroubleWordsScreen() {
   const { t } = useTranslation();
   const router = useRouter();
-  const { theme } = useTheme();
-  const styles = useMemo(() => createStyles(theme), [theme]);
+  const { theme, colorScheme } = useTheme();
+  const styles = useMemo(() => createStyles(theme, colorScheme), [theme, colorScheme]);
   const { data, isLoading } = useTroubleWords();
   const dismiss = useDismissTroubleWord();
   const [starting, setStarting] = useState<SrsDeckType | null>(null);
@@ -51,14 +53,17 @@ export default function TroubleWordsScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()} style={styles.backRow}>
+    <ScreenShell
+      header={
+        <Pressable
+          onPress={() => router.back()}
+          style={({ pressed }) => [styles.backRow, pressed && { opacity: 0.7 }]}
+        >
           <ArrowLeft size={18} color={theme.appTextMuted} />
           <Text style={styles.backTitle}>{t("srs.hub.troubleWordsTile")}</Text>
         </Pressable>
-      </View>
-
+      }
+    >
       {isLoading ? (
         <LoadingPlaceholder style={styles.center} />
       ) : (
@@ -132,28 +137,23 @@ export default function TroubleWordsScreen() {
           }
         />
       )}
-    </SafeAreaView>
+    </ScreenShell>
   );
 }
 
-function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
+function createStyles(
+  theme: ReturnType<typeof useTheme>["theme"],
+  colorScheme: ColorScheme,
+) {
   return StyleSheet.create({
-    safe: { flex: 1, backgroundColor: theme.appBg },
-    header: {
-      backgroundColor: theme.appSurface,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: theme.appBorder,
-      paddingHorizontal: 16,
-      paddingVertical: 12,
+    backRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      padding: 4,
+      marginLeft: -4,
     },
-    backRow: { flexDirection: "row", alignItems: "center", gap: 6, padding: 4 },
-    backTitle: {
-      fontSize: 11,
-      fontWeight: "600",
-      letterSpacing: 1.2,
-      textTransform: "uppercase",
-      color: theme.main400,
-    },
+    backTitle: navBackTitleStyle(theme, colorScheme, { letterSpacing: 1.2 }),
     center: { flex: 1, alignItems: "center", justifyContent: "center" },
     list: { padding: 16, gap: 8, paddingBottom: 40 },
     empty: { textAlign: "center", color: theme.appTextMuted, padding: 40 },

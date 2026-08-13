@@ -1,36 +1,69 @@
 import { useMemo, useState } from "react";
 import {
-  FlatList,
-  Modal,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, type Href } from "expo-router";
 import { ArrowLeft, ChevronRight, Plus } from "lucide-react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { CategoryIconField } from "@/components/CategoryIconField";
+import { CategoryTitle } from "@/components/CategoryIcon";
 import { LoadingPlaceholder } from "@/components/LoadingPlaceholder";
+import { ScreenShell } from "@/components/ScreenShell";
+import { SearchBar } from "@/components/SearchBar";
+import { SlideUpModal } from "@/components/SlideUpModal";
 import { WordPickerSheet } from "@/components/WordPickerSheet";
+import { normalizeCategoryLabel } from "@/lib/categoryMatch";
 import { useThemes } from "@/hooks/useThemes";
 import { useWords } from "@/hooks/useWords";
 import { useTranslation } from "@/i18n/I18nProvider";
 import { useTheme } from "@/theme/ThemeProvider";
+import { navBackTitleStyle } from "@/theme/screenNavStyles";
+import { ColorScheme } from "@/settings/appSettings";
+
+type ThemeListItem = {
+  id: number;
+  name: string;
+  wordCount: number;
+  questionCount?: number;
+  iconSvg?: string | null;
+};
 
 export default function ThemesHubScreen() {
   const { t } = useTranslation();
   const router = useRouter();
-  const { theme } = useTheme();
-  const styles = useMemo(() => createStyles(theme), [theme]);
+  const insets = useSafeAreaInsets();
+  const { theme, colorScheme } = useTheme();
+  const styles = useMemo(() => createStyles(theme, colorScheme), [theme, colorScheme]);
   const { themes, isLoading, createTheme } = useThemes();
   const { words } = useWords();
 
+  const [query, setQuery] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [showPicker, setShowPicker] = useState(false);
   const [name, setName] = useState("");
+  const [iconSvg, setIconSvg] = useState("");
   const [pickerIds, setPickerIds] = useState<Set<number>>(() => new Set());
   const [saving, setSaving] = useState(false);
+
+  const filtered = useMemo(() => {
+    const q = normalizeCategoryLabel(query);
+    if (!q) return themes as ThemeListItem[];
+    return (themes as ThemeListItem[]).filter((item) =>
+      normalizeCategoryLabel(item.name).includes(q),
+    );
+  }, [themes, query]);
+
+  const closeCreateModal = () => {
+    setShowCreate(false);
+    setName("");
+    setIconSvg("");
+    setPickerIds(new Set());
+  };
 
   const handleCreate = async () => {
     if (!name.trim() || saving) return;
@@ -39,58 +72,72 @@ export default function ThemesHubScreen() {
       const created = await createTheme({
         name: name.trim(),
         wordIds: [...pickerIds],
+        iconSvg: iconSvg.trim() || null,
       });
-      setShowCreate(false);
-      setShowPicker(false);
-      setName("");
-      setPickerIds(new Set());
-      router.push({ pathname: "/themes/[id]", params: { id: created.id } });
+      closeCreateModal();
+      router.push({ pathname: "/themes/[id]", params: { id: created.id } } as Href);
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()} style={styles.backRow}>
-          <ArrowLeft size={18} color={theme.appTextMuted} />
-          <Text style={styles.backTitle}>{t("nav.themes")}</Text>
-        </Pressable>
-        <Pressable
-          onPress={() => {
-            setName("");
-            setPickerIds(new Set());
-            setShowCreate(true);
-          }}
-          style={styles.addBtn}
-        >
-          <Plus size={20} color={theme.main500} />
-        </Pressable>
-      </View>
-
-      <Text style={styles.pageTitle}>{t("themes.title")}</Text>
-      <Text style={styles.subtitle}>{t("themes.subtitle")}</Text>
-
-      {isLoading ? (
-        <LoadingPlaceholder padding="lg" style={styles.center} />
-      ) : (
-        <FlatList
-          data={themes}
-          keyExtractor={(item) => String(item.id)}
-          contentContainerStyle={styles.listContent}
-          ListEmptyComponent={
-            <Text style={styles.empty}>{t("themes.empty")}</Text>
-          }
-          renderItem={({ item }) => (
+    <ScreenShell
+      header={
+        <>
+          <View style={styles.headerTop}>
             <Pressable
+              onPress={() => router.back()}
+              style={({ pressed }) => [styles.backRow, pressed && { opacity: 0.7 }]}
+            >
+              <ArrowLeft size={18} color={theme.appTextMuted} />
+              <Text style={styles.backTitle}>{t("nav.themes")}</Text>
+            </Pressable>
+            <View style={styles.headerSpacer} />
+          </View>
+          <Text style={styles.pageTitle}>{t("themes.title")}</Text>
+          <Text style={styles.subtitle}>{t("themes.subtitle")}</Text>
+          <SearchBar
+            value={query}
+            onChange={setQuery}
+            placeholder={t("themes.searchPlaceholder")}
+          />
+        </>
+      }
+      headerStyle={styles.headerBlock}
+    >
+      <ScrollView
+        contentContainerStyle={[
+          styles.listContent,
+          { paddingBottom: Math.max(insets.bottom, 16) + 88 },
+        ]}
+      >
+        {isLoading ? (
+          <LoadingPlaceholder padding="lg" style={styles.center} />
+        ) : themes.length === 0 ? (
+          <Text style={styles.empty}>{t("themes.empty")}</Text>
+        ) : filtered.length === 0 ? (
+          <Text style={styles.empty}>
+            {t("categories.selectNotFound", { query: query.trim() })}
+          </Text>
+        ) : (
+          filtered.map((item) => (
+            <Pressable
+              key={item.id}
               onPress={() =>
-                router.push({ pathname: "/themes/[id]", params: { id: item.id } })
+                router.push({ pathname: "/themes/[id]", params: { id: item.id } } as Href)
               }
               style={({ pressed }) => [styles.card, pressed && { opacity: 0.85 }]}
             >
               <View style={styles.cardBody}>
-                <Text style={styles.cardTitle}>{item.name}</Text>
+                <CategoryTitle
+                  name={item.name}
+                  iconSvg={item.iconSvg}
+                  iconSize={22}
+                  color={theme.appText}
+                  nameSize={18}
+                  nameWeight="700"
+                />
                 <Text style={styles.cardMeta}>
                   {t("themes.meta", {
                     words: item.wordCount,
@@ -100,39 +147,76 @@ export default function ThemesHubScreen() {
               </View>
               <ChevronRight size={18} color={theme.appTextMuted} />
             </Pressable>
-          )}
-        />
-      )}
+          ))
+        )}
+      </ScrollView>
 
-      <Modal visible={showCreate} transparent animationType="fade">
-        <Pressable style={styles.modalBackdrop} onPress={() => setShowCreate(false)}>
-          <Pressable style={styles.modalSheet} onPress={(e) => e.stopPropagation()}>
-            <Text style={styles.modalTitle}>{t("themes.newTheme")}</Text>
-            <TextInput
-              value={name}
-              onChangeText={setName}
-              placeholder={t("themes.namePlaceholder")}
-              placeholderTextColor={theme.appTextMuted}
-              style={styles.input}
-            />
-            <Pressable
-              onPress={() => setShowPicker(true)}
-              style={styles.outlineBtn}
-            >
-              <Text style={styles.outlineBtnText}>
-                {t("themes.selectedWordCount", { count: pickerIds.size })}
-              </Text>
-            </Pressable>
-            <Pressable
-              onPress={handleCreate}
-              disabled={!name.trim() || saving}
-              style={[styles.primaryBtn, (!name.trim() || saving) && styles.disabledBtn]}
-            >
-              <Text style={styles.primaryBtnText}>{t("common.create")}</Text>
-            </Pressable>
+      <Pressable
+        onPress={() => {
+          setName("");
+          setIconSvg("");
+          setPickerIds(new Set());
+          setShowCreate(true);
+        }}
+        style={({ pressed }) => [
+          styles.fab,
+          { bottom: Math.max(insets.bottom, 16) + 16 },
+          pressed && { opacity: 0.9 },
+        ]}
+      >
+        <Plus size={18} color="#fff" />
+        <Text style={styles.fabText}>{t("themes.newTheme")}</Text>
+      </Pressable>
+
+      <SlideUpModal
+        visible={showCreate && !showPicker}
+        onClose={closeCreateModal}
+        title={t("themes.newTheme")}
+        keyboardAware
+      >
+        <View style={styles.modalBody}>
+          <Text style={styles.fieldLabel}>{t("themes.nameLabel")}</Text>
+          <TextInput
+            value={name}
+            onChangeText={setName}
+            placeholder={t("themes.namePlaceholder")}
+            placeholderTextColor={theme.appTextMuted}
+            style={styles.input}
+          />
+          <CategoryIconField
+            value={iconSvg}
+            onChange={setIconSvg}
+            namespace="themes"
+          />
+          <Pressable
+            onPress={() => setShowPicker(true)}
+            style={styles.outlineBtn}
+          >
+            <Text style={styles.outlineBtnText}>
+              {t("themes.pickWordsOptional")} ({pickerIds.size})
+            </Text>
           </Pressable>
-        </Pressable>
-      </Modal>
+          <View style={styles.modalActions}>
+            <Pressable
+              onPress={closeCreateModal}
+              style={({ pressed }) => [styles.cancelBtn, pressed && { opacity: 0.85 }]}
+            >
+              <Text style={styles.cancelBtnText}>{t("common.cancel")}</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => void handleCreate()}
+              disabled={!name.trim() || saving}
+              style={({ pressed }) => [
+                styles.primaryBtn,
+                (!name.trim() || saving) && styles.disabledBtn,
+                pressed && name.trim() && !saving ? { opacity: 0.85 } : null,
+              ]}
+            >
+              <Text style={styles.primaryBtnText}>{t("common.add")}</Text>
+            </Pressable>
+          </View>
+        </View>
+      </SlideUpModal>
 
       <WordPickerSheet
         visible={showPicker}
@@ -149,102 +233,132 @@ export default function ThemesHubScreen() {
         onClose={() => setShowPicker(false)}
         title={t("themes.pickWords")}
       />
-    </SafeAreaView>
+    </ScreenShell>
   );
 }
 
-function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
+function createStyles(
+  theme: ReturnType<typeof useTheme>["theme"],
+  colorScheme: ColorScheme,
+) {
   return StyleSheet.create({
-    safe: { flex: 1, backgroundColor: theme.appBg },
-    header: {
+    headerBlock: {
+      gap: 8,
+    },
+    headerTop: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      paddingHorizontal: 16,
-      paddingTop: 8,
+      minHeight: 29,
     },
-    backRow: { flexDirection: "row", alignItems: "center", gap: 6, padding: 4 },
-    backTitle: {
-      fontSize: 11,
-      fontWeight: "600",
-      letterSpacing: 1.2,
-      textTransform: "uppercase",
-      color: theme.main400,
+    headerSpacer: { width: 36, height: 36 },
+    backRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      padding: 4,
+      marginLeft: -4,
     },
-    addBtn: { padding: 8 },
+    backTitle: navBackTitleStyle(theme, colorScheme),
     pageTitle: {
-      fontSize: 22,
+      fontSize: 20,
       fontWeight: "700",
       color: theme.appText,
-      paddingHorizontal: 20,
-      marginTop: 8,
     },
     subtitle: {
       fontSize: 14,
       color: theme.appTextSecondary,
-      paddingHorizontal: 20,
-      marginTop: 4,
-      marginBottom: 12,
+      marginBottom: 4,
     },
-    listContent: { paddingHorizontal: 16, paddingBottom: 32, gap: 8 },
+    listContent: { paddingHorizontal: 20, paddingTop: 16, gap: 12 },
     card: {
       flexDirection: "row",
       alignItems: "center",
       gap: 12,
       backgroundColor: theme.appSurface,
-      borderWidth: StyleSheet.hairlineWidth,
+      borderWidth: 1,
       borderColor: theme.appBorder,
       borderRadius: 16,
       padding: 16,
     },
-    cardBody: { flex: 1, minWidth: 0 },
-    cardTitle: { fontSize: 17, fontWeight: "700", color: theme.appText },
-    cardMeta: { fontSize: 12, color: theme.appTextMuted, marginTop: 2 },
-    center: { flex: 1, alignItems: "center", justifyContent: "center" },
+    cardBody: { flex: 1, minWidth: 0, gap: 4 },
+    cardMeta: { fontSize: 12, color: theme.appTextMuted, marginLeft: 30 },
+    center: { paddingVertical: 48, alignItems: "center" },
     empty: {
       textAlign: "center",
       color: theme.appTextMuted,
-      padding: 40,
+      paddingVertical: 48,
       fontSize: 14,
     },
-    modalBackdrop: {
-      flex: 1,
-      backgroundColor: "rgba(0,0,0,0.4)",
-      justifyContent: "center",
-      padding: 24,
+    fab: {
+      position: "absolute",
+      right: 24,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      backgroundColor: theme.main500,
+      borderRadius: 999,
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      shadowColor: theme.main600,
+      shadowOpacity: 0.35,
+      shadowRadius: 8,
+      shadowOffset: { width: 0, height: 4 },
+      elevation: 6,
     },
-    modalSheet: {
-      backgroundColor: theme.appSurface,
-      borderRadius: 16,
-      padding: 20,
-      gap: 12,
+    fabText: { color: "#fff", fontSize: 14, fontWeight: "600" },
+    modalBody: {
+      paddingHorizontal: 20,
+      paddingBottom: 8,
+      gap: 4,
     },
-    modalTitle: { fontSize: 17, fontWeight: "700", color: theme.appText },
+    fieldLabel: {
+      fontSize: 10,
+      fontWeight: "600",
+      letterSpacing: 1,
+      textTransform: "uppercase",
+      color: theme.appTextMuted,
+      marginBottom: 6,
+    },
     input: {
       borderWidth: 1,
       borderColor: theme.appBorderStrong,
-      borderRadius: 10,
+      borderRadius: 12,
       paddingHorizontal: 12,
       paddingVertical: 10,
       fontSize: 15,
       color: theme.appText,
       backgroundColor: theme.appMuted,
+      marginBottom: 4,
     },
     outlineBtn: {
       borderWidth: 1,
+      borderStyle: "dashed",
       borderColor: theme.appBorderStrong,
-      borderRadius: 10,
-      paddingVertical: 10,
+      borderRadius: 12,
+      paddingVertical: 12,
       alignItems: "center",
+      marginBottom: 4,
     },
-    outlineBtnText: { fontSize: 14, fontWeight: "600", color: theme.main500 },
-    primaryBtn: {
-      backgroundColor: theme.main500,
-      borderRadius: 10,
+    outlineBtnText: { fontSize: 14, fontWeight: "600", color: theme.appTextSecondary },
+    modalActions: { flexDirection: "row", gap: 8, marginTop: 4 },
+    cancelBtn: {
+      flex: 1,
+      borderWidth: 1,
+      borderColor: theme.appBorderStrong,
+      borderRadius: 12,
       paddingVertical: 12,
       alignItems: "center",
     },
-    primaryBtnText: { color: "#fff", fontWeight: "600", fontSize: 15 },
-    disabledBtn: { opacity: 0.5 },
+    cancelBtnText: { fontSize: 14, fontWeight: "600", color: theme.appTextSecondary },
+    primaryBtn: {
+      flex: 1,
+      backgroundColor: theme.main500,
+      borderRadius: 12,
+      paddingVertical: 12,
+      alignItems: "center",
+    },
+    primaryBtnText: { color: "#fff", fontWeight: "700", fontSize: 14 },
+    disabledBtn: { opacity: 0.4 },
   });
 }

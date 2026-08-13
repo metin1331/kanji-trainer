@@ -10,12 +10,14 @@ import {
 } from "react-native";
 import { ArrowLeft, Dices } from "lucide-react-native";
 import { useRouter } from "expo-router";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { ScreenShell } from "@/components/ScreenShell";
 import type { Word } from "@/lib/types";
 import { apiFetch } from "@/lib/apiFetch";
 import { getStudySession, type StudyMode } from "@/lib/studyStore";
 import { useTranslation } from "@/i18n/I18nProvider";
 import { useTheme } from "@/theme/ThemeProvider";
+import { navBackTitleStyle } from "@/theme/screenNavStyles";
+import { ColorScheme } from "@/settings/appSettings";
 
 function getLevelInfo(word: Word, mode: StudyMode) {
   if (mode === "okunuş")
@@ -42,9 +44,9 @@ function shuffle<T>(arr: T[]): T[] {
 
 export function StudyScreen() {
   const { t, formatStudyDate } = useTranslation();
-  const { theme } = useTheme();
+  const { theme, colorScheme } = useTheme();
   const router = useRouter();
-  const styles = useMemo(() => createStyles(theme), [theme]);
+  const styles = useMemo(() => createStyles(theme, colorScheme), [theme, colorScheme]);
 
   const session = useMemo(() => getStudySession(), []);
   const { mode, title, backPath } = session;
@@ -158,28 +160,36 @@ export function StudyScreen() {
     router.replace(backPath as "/words" | "/pronunciation" | "/meaning" | "/");
   };
 
+  const headerBar = (
+    <View style={styles.topBarRow}>
+      <Pressable onPress={goBack} style={styles.backRow}>
+        <ArrowLeft size={18} color={theme.appTextMuted} />
+        <Text style={styles.backTitle}>{title}</Text>
+      </Pressable>
+      {!done && word ? (
+        <Text style={styles.progress}>
+          {t("common.cardProgress", { current: index + 1, total: words.length })}
+        </Text>
+      ) : null}
+    </View>
+  );
+
   if (!word && !done) {
     return (
-      <SafeAreaView style={styles.safe}>
+      <ScreenShell>
         <View style={styles.center}>
           <Text style={styles.muted}>{t("study.notFound")}</Text>
           <Pressable onPress={goBack}>
             <Text style={styles.link}>{t("study.backToList")}</Text>
           </Pressable>
         </View>
-      </SafeAreaView>
+      </ScreenShell>
     );
   }
 
   if (done) {
     return (
-      <SafeAreaView style={styles.safe}>
-        <View style={styles.topBar}>
-          <Pressable onPress={goBack} style={styles.backRow}>
-            <ArrowLeft size={18} color={theme.appTextMuted} />
-            <Text style={styles.backTitle}>{title}</Text>
-          </Pressable>
-        </View>
+      <ScreenShell header={headerBar} bottomInset>
         <View style={styles.center}>
           <View style={[styles.starCircle, { backgroundColor: theme.starColor }]}>
             <Text style={styles.starIcon}>★</Text>
@@ -199,7 +209,7 @@ export function StudyScreen() {
             <Text style={styles.outlineBtnText}>{t("study.backToList")}</Text>
           </Pressable>
         </View>
-      </SafeAreaView>
+      </ScreenShell>
     );
   }
 
@@ -212,17 +222,7 @@ export function StudyScreen() {
   });
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
-      <View style={styles.topBar}>
-        <Pressable onPress={goBack} style={styles.backRow}>
-          <ArrowLeft size={18} color={theme.appTextMuted} />
-          <Text style={styles.backTitle}>{title}</Text>
-        </Pressable>
-        <Text style={styles.progress}>
-          {t("common.cardProgress", { current: index + 1, total: words.length })}
-        </Text>
-      </View>
-
+    <ScreenShell header={headerBar} bottomInset>
       <View style={styles.cardArea} {...panResponder.panHandlers}>
         <Animated.View
           style={[
@@ -353,31 +353,23 @@ export function StudyScreen() {
           </ScrollView>
         </View>
       ) : null}
-    </SafeAreaView>
+    </ScreenShell>
   );
 }
 
-function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
+function createStyles(
+  theme: ReturnType<typeof useTheme>["theme"],
+  colorScheme: ColorScheme,
+) {
   return StyleSheet.create({
     safe: { flex: 1, backgroundColor: theme.appBg },
-    topBar: {
+    topBarRow: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      paddingHorizontal: 20,
-      paddingVertical: 20,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: theme.appBorder,
-      backgroundColor: theme.appSurface,
     },
     backRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-    backTitle: {
-      fontSize: 11,
-      fontWeight: "600",
-      letterSpacing: 1.2,
-      textTransform: "uppercase",
-      color: theme.main400,
-    },
+    backTitle: navBackTitleStyle(theme, colorScheme, { letterSpacing: 1.2 }),
     progress: {
       fontSize: 13,
       color: theme.appTextMuted,

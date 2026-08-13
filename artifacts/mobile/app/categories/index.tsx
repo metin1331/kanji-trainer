@@ -16,10 +16,11 @@ import {
   Plus,
   Rows3,
 } from "lucide-react-native";
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CategoryIconField } from "@/components/CategoryIconField";
 import { CategoryTitle } from "@/components/CategoryIcon";
 import { LoadingPlaceholder } from "@/components/LoadingPlaceholder";
+import { ScreenShell } from "@/components/ScreenShell";
 import { SearchBar } from "@/components/SearchBar";
 import { SlideUpModal } from "@/components/SlideUpModal";
 import { useCategories } from "@/hooks/useCategories";
@@ -31,6 +32,8 @@ import {
 } from "@/lib/categoryView";
 import { useTranslation } from "@/i18n/I18nProvider";
 import { useTheme } from "@/theme/ThemeProvider";
+import { navBackTitleStyle } from "@/theme/screenNavStyles";
+import { ColorScheme } from "@/settings/appSettings";
 
 const LAYOUT_OPTIONS: {
   value: CategoryViewLayout;
@@ -46,8 +49,8 @@ export default function CategoriesHubScreen() {
   const { t } = useTranslation();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { theme } = useTheme();
-  const styles = useMemo(() => createStyles(theme), [theme]);
+  const { theme, colorScheme } = useTheme();
+  const styles = useMemo(() => createStyles(theme, colorScheme), [theme, colorScheme]);
   const { data: categories = [], isLoading, createCategory } = useCategories();
 
   const [layout, setLayout] = useState<CategoryViewLayout>("row");
@@ -97,49 +100,52 @@ export default function CategoriesHubScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
-      <View style={styles.header}>
-        <View style={styles.headerTop}>
-          <Pressable
-            onPress={() => router.back()}
-            style={({ pressed }) => [styles.backRow, pressed && { opacity: 0.7 }]}
-          >
-            <ArrowLeft size={18} color={theme.appTextMuted} />
-            <Text style={styles.backTitle}>{t("nav.categories")}</Text>
-          </Pressable>
-          <View style={styles.layoutToggle}>
-            {LAYOUT_OPTIONS.map(({ value, Icon, labelKey }) => {
-              const active = layout === value;
-              return (
-                <Pressable
-                  key={value}
-                  onPress={() => setLayout(value)}
-                  accessibilityLabel={t(`categories.view.${labelKey}`)}
-                  style={({ pressed }) => [
-                    styles.layoutBtn,
-                    active && styles.layoutBtnActive,
-                    pressed && { opacity: 0.85 },
-                  ]}
-                >
-                  <Icon
-                    size={16}
-                    color={active ? theme.main500 : theme.appTextMuted}
-                    strokeWidth={2}
-                  />
-                </Pressable>
-              );
-            })}
+    <ScreenShell
+      header={
+        <>
+          <View style={styles.headerTop}>
+            <Pressable
+              onPress={() => router.back()}
+              style={({ pressed }) => [styles.backRow, pressed && { opacity: 0.7 }]}
+            >
+              <ArrowLeft size={18} color={theme.appTextMuted} />
+              <Text style={styles.backTitle}>{t("nav.categories")}</Text>
+            </Pressable>
+            <View style={styles.layoutToggle}>
+              {LAYOUT_OPTIONS.map(({ value, Icon, labelKey }) => {
+                const active = layout === value;
+                return (
+                  <Pressable
+                    key={value}
+                    onPress={() => setLayout(value)}
+                    accessibilityLabel={t(`categories.view.${labelKey}`)}
+                    style={({ pressed }) => [
+                      styles.layoutBtn,
+                      active && styles.layoutBtnActive,
+                      pressed && { opacity: 0.85 },
+                    ]}
+                  >
+                    <Icon
+                      size={16}
+                      color={active ? theme.main500 : theme.appTextMuted}
+                      strokeWidth={2}
+                    />
+                  </Pressable>
+                );
+              })}
+            </View>
           </View>
-        </View>
-        <Text style={styles.pageTitle}>{t("categories.title")}</Text>
-        <Text style={styles.subtitle}>{t("categories.subtitle")}</Text>
-        <SearchBar
-          value={query}
-          onChange={setQuery}
-          placeholder={t("categories.searchPlaceholder")}
-        />
-      </View>
-
+          <Text style={styles.pageTitle}>{t("categories.title")}</Text>
+          <Text style={styles.subtitle}>{t("categories.subtitle")}</Text>
+          <SearchBar
+            value={query}
+            onChange={setQuery}
+            placeholder={t("categories.searchPlaceholder")}
+          />
+        </>
+      }
+      headerStyle={styles.headerBlock}
+    >
       <ScrollView
         contentContainerStyle={[
           styles.listContent,
@@ -223,7 +229,7 @@ export default function CategoriesHubScreen() {
         visible={showCreate}
         onClose={closeCreateModal}
         title={t("categories.newCategory")}
-        maxHeight="70%"
+        keyboardAware
       >
         <View style={styles.modalBody}>
           <Text style={styles.fieldLabel}>{t("categories.nameLabel")}</Text>
@@ -256,20 +262,16 @@ export default function CategoriesHubScreen() {
           </View>
         </View>
       </SlideUpModal>
-    </SafeAreaView>
+    </ScreenShell>
   );
 }
 
-function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
+function createStyles(
+  theme: ReturnType<typeof useTheme>["theme"],
+  colorScheme: ColorScheme,
+) {
   return StyleSheet.create({
-    safe: { flex: 1, backgroundColor: theme.appBg },
-    header: {
-      backgroundColor: theme.appSurface,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: theme.appBorder,
-      paddingHorizontal: 20,
-      paddingTop: 12,
-      paddingBottom: 16,
+    headerBlock: {
       gap: 8,
     },
     headerTop: {
@@ -279,13 +281,7 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
       minHeight: 29,
     },
     backRow: { flexDirection: "row", alignItems: "center", gap: 6, padding: 4, marginLeft: -4 },
-    backTitle: {
-      fontSize: 11,
-      fontWeight: "600",
-      letterSpacing: 1.5,
-      textTransform: "uppercase",
-      color: theme.main400,
-    },
+    backTitle: navBackTitleStyle(theme, colorScheme),
     layoutToggle: {
       flexDirection: "row",
       alignItems: "center",
@@ -389,7 +385,7 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
       color: theme.appText,
       marginBottom: 4,
     },
-    modalActions: { flexDirection: "row", gap: 8, marginTop: 8 },
+    modalActions: { flexDirection: "row", gap: 8, marginTop: 4 },
     outlineBtn: {
       flex: 1,
       borderWidth: 1,

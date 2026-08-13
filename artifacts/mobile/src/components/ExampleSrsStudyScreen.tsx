@@ -13,7 +13,8 @@ import {
 import { useRouter } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Send, Eye } from "lucide-react-native";
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { ScreenShell } from "@/components/ScreenShell";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ExampleSentenceDisplay } from "@/components/ExampleSentenceDisplay";
 import { SrsWordSlideUp } from "@/components/SrsWordSlideUp";
 import type { WordFormSaveData } from "@/components/WordFormModal";
@@ -31,6 +32,8 @@ import {
 } from "@/lib/srsExamples";
 import { useTranslation } from "@/i18n/I18nProvider";
 import { useTheme } from "@/theme/ThemeProvider";
+import { navBackTitleStyle } from "@/theme/screenNavStyles";
+import { ColorScheme } from "@/settings/appSettings";
 import type { SrsExample, Word } from "@/lib/types";
 import type { SrsQueueItem } from "@/types/srs";
 
@@ -53,8 +56,8 @@ function queueWordToWord(item: SrsQueueItem): Word {
 export function ExampleSrsStudyScreen() {
   const { t } = useTranslation();
   const router = useRouter();
-  const { theme } = useTheme();
-  const styles = useMemo(() => createStyles(theme), [theme]);
+  const { theme, colorScheme } = useTheme();
+  const styles = useMemo(() => createStyles(theme, colorScheme), [theme, colorScheme]);
   const queryClient = useQueryClient();
   const { increment: recordStudy } = useStudyActivity();
   const { settings } = useAppSettings();
@@ -266,27 +269,27 @@ export function ExampleSrsStudyScreen() {
 
   if (done) {
     return (
-      <SafeAreaView style={styles.safe}>
+      <ScreenShell>
         <View style={styles.center}>
           <Text style={styles.doneTitle}>{t("common.completed")}</Text>
           <Pressable onPress={() => router.replace(backPath as never)} style={styles.primaryBtn}>
             <Text style={styles.primaryBtnText}>{t("common.goBack")}</Text>
           </Pressable>
         </View>
-      </SafeAreaView>
+      </ScreenShell>
     );
   }
 
   if (!item || !example || !liveWord) {
     return (
-      <SafeAreaView style={styles.safe}>
+      <ScreenShell>
         <View style={styles.center}>
           <Text style={styles.empty}>{t("srs.study.noExample")}</Text>
           <Pressable onPress={() => router.replace(backPath as never)} style={styles.outlineBtn}>
             <Text style={styles.outlineBtnText}>{t("common.goBack")}</Text>
           </Pressable>
         </View>
-      </SafeAreaView>
+      </ScreenShell>
     );
   }
 
@@ -301,28 +304,30 @@ export function ExampleSrsStudyScreen() {
           ? theme.main400
           : theme.appBorderStrong;
 
-  return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
-      <View style={styles.header}>
-        <Pressable onPress={() => router.replace(backPath as never)} style={styles.backRow}>
-          <ArrowLeft size={18} color={theme.appTextMuted} />
-          <Text style={styles.backTitle} numberOfLines={1}>
-            {title}
-          </Text>
+  const headerBar = (
+    <View style={styles.headerRow}>
+      <Pressable onPress={() => router.replace(backPath as never)} style={styles.backRow}>
+        <ArrowLeft size={18} color={theme.appTextMuted} />
+        <Text style={styles.backTitle} numberOfLines={1}>
+          {title}
+        </Text>
+      </Pressable>
+      <View style={styles.headerRight}>
+        <Pressable
+          onPress={() => setShowCardDetails(true)}
+          style={({ pressed }) => [styles.eyeBtn, pressed && { opacity: 0.85 }]}
+        >
+          <Eye size={16} color={theme.appTextSecondary} />
         </Pressable>
-        <View style={styles.headerRight}>
-          <Pressable
-            onPress={() => setShowCardDetails(true)}
-            style={({ pressed }) => [styles.eyeBtn, pressed && { opacity: 0.85 }]}
-          >
-            <Eye size={16} color={theme.appTextSecondary} />
-          </Pressable>
-          <Text style={styles.progress}>
-            {t("common.cardProgress", { current: index + 1, total: items.length })}
-          </Text>
-        </View>
+        <Text style={styles.progress}>
+          {t("common.cardProgress", { current: index + 1, total: items.length })}
+        </Text>
       </View>
+    </View>
+  );
 
+  return (
+    <ScreenShell header={headerBar}>
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -461,33 +466,24 @@ export function ExampleSrsStudyScreen() {
         onClose={() => setShowCardDetails(false)}
         onSave={handleSaveWord}
       />
-    </SafeAreaView>
+    </ScreenShell>
   );
 }
 
-function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
+function createStyles(
+  theme: ReturnType<typeof useTheme>["theme"],
+  colorScheme: ColorScheme,
+) {
   return StyleSheet.create({
     safe: { flex: 1, backgroundColor: theme.appBg },
     flex: { flex: 1 },
-    header: {
+    headerRow: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      paddingHorizontal: 16,
-      paddingVertical: 12,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: theme.appBorder,
-      backgroundColor: theme.appSurface,
     },
     backRow: { flexDirection: "row", alignItems: "center", gap: 6, flex: 1 },
-    backTitle: {
-      fontSize: 11,
-      fontWeight: "600",
-      letterSpacing: 1,
-      textTransform: "uppercase",
-      color: theme.main400,
-      flex: 1,
-    },
+    backTitle: navBackTitleStyle(theme, colorScheme, { letterSpacing: 1, flex: 1 }),
     headerRight: { flexDirection: "row", alignItems: "center", gap: 10 },
     eyeBtn: {
       width: 36,

@@ -1,9 +1,9 @@
 import { useMemo, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text } from "react-native";
 import { ScrollView } from "react-native-gesture-handler";
 import { useRouter } from "expo-router";
 import { ArrowLeft } from "lucide-react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { ScreenShell } from "@/components/ScreenShell";
 import { DeckActivityChart } from "@/components/progress/DeckActivityChart";
 import { JlptProgressSection } from "@/components/progress/JlptProgressSection";
 import { LevelDistributionChart } from "@/components/progress/LevelDistributionChart";
@@ -17,13 +17,15 @@ import { useWords } from "@/hooks/useWords";
 import { membershipYear, yearRange } from "@/lib/authApi";
 import { useTranslation } from "@/i18n/I18nProvider";
 import { useTheme } from "@/theme/ThemeProvider";
+import { navBackTitleStyle } from "@/theme/screenNavStyles";
+import { ColorScheme } from "@/settings/appSettings";
 
 export default function ProgressScreen() {
   const { t } = useTranslation();
   const router = useRouter();
   const { user } = useAuth();
-  const { theme } = useTheme();
-  const styles = useMemo(() => createStyles(theme), [theme]);
+  const { theme, colorScheme } = useTheme();
+  const styles = useMemo(() => createStyles(theme, colorScheme), [theme, colorScheme]);
   const { words, isLoading } = useWords();
   const { activityByDate, isLoading: activityLoading } = useStudyActivity();
 
@@ -36,19 +38,22 @@ export default function ProgressScreen() {
   const [heatmapYear, setHeatmapYear] = useState(currentYear);
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
-      <View style={styles.header}>
-        <Pressable
-          onPress={() => router.push("/")}
-          style={({ pressed }) => [styles.backRow, pressed && { opacity: 0.7 }]}
-        >
-          <ArrowLeft size={18} color={theme.appTextMuted} />
-          <Text style={styles.backLabel}>{t("nav.progress")}</Text>
-        </Pressable>
-        <Text style={styles.title}>{t("progress.title")}</Text>
-        <Text style={styles.subtitle}>{t("progress.subtitle")}</Text>
-      </View>
-
+    <ScreenShell
+      header={
+        <>
+          <Pressable
+            onPress={() => router.push("/")}
+            style={({ pressed }) => [styles.backRow, pressed && { opacity: 0.7 }]}
+          >
+            <ArrowLeft size={18} color={theme.appTextMuted} />
+            <Text style={styles.backLabel}>{t("nav.progress")}</Text>
+          </Pressable>
+          <Text style={styles.title}>{t("progress.title")}</Text>
+          <Text style={styles.subtitle}>{t("progress.subtitle")}</Text>
+        </>
+      }
+      headerStyle={styles.headerBlock}
+    >
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.content}
@@ -87,23 +92,17 @@ export default function ProgressScreen() {
           </>
         )}
       </ScrollView>
-    </SafeAreaView>
+    </ScreenShell>
   );
 }
 
-function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
+function createStyles(
+  theme: ReturnType<typeof useTheme>["theme"],
+  colorScheme: ColorScheme,
+) {
   return StyleSheet.create({
-    safe: {
-      flex: 1,
-      backgroundColor: theme.appBg,
-    },
-    header: {
-      backgroundColor: theme.appSurface,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: theme.appBorder,
-      paddingHorizontal: 20,
-      paddingTop: 12,
-      paddingBottom: 16,
+    headerBlock: {
+      gap: 8,
     },
     backRow: {
       flexDirection: "row",
@@ -112,13 +111,7 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
       marginLeft: -4,
       padding: 4,
     },
-    backLabel: {
-      fontSize: 11,
-      fontWeight: "600",
-      letterSpacing: 1.5,
-      textTransform: "uppercase",
-      color: theme.main400,
-    },
+    backLabel: navBackTitleStyle(theme, colorScheme),
     title: {
       marginTop: 8,
       fontSize: 20,

@@ -2,20 +2,22 @@ import { useCallback, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ArrowLeft } from "lucide-react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { HintLinesDisplay } from "@/components/HintLinesEditor";
 import { LoadingPlaceholder } from "@/components/LoadingPlaceholder";
+import { ScreenShell } from "@/components/ScreenShell";
 import { useTheme } from "@/hooks/useThemes";
 import { useTranslation } from "@/i18n/I18nProvider";
 import { useTheme as useAppTheme } from "@/theme/ThemeProvider";
+import { backTitleColor } from "@/theme/screenNavStyles";
+import { ColorScheme } from "@/settings/appSettings";
 
 export default function ThemeQuizStudyScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const themeId = Number(id);
   const { t } = useTranslation();
   const router = useRouter();
-  const { theme: colors } = useAppTheme();
-  const styles = useMemo(() => createStyles(colors), [colors]);
+  const { theme: colors, colorScheme } = useAppTheme();
+  const styles = useMemo(() => createStyles(colors, colorScheme), [colors, colorScheme]);
 
   const { theme, isLoading } = useTheme(themeId);
   const questions = useMemo(() => theme?.questions ?? [], [theme?.questions]);
@@ -40,30 +42,44 @@ export default function ThemeQuizStudyScreen() {
     setHintsOpen(false);
   }, [index, questions.length]);
 
+  const headerBar = theme ? (
+    <View style={styles.headerRow}>
+      <Pressable onPress={() => router.back()} style={styles.backRow}>
+        <ArrowLeft size={18} color={colors.appTextMuted} />
+        <Text style={styles.backTitle}>{theme.name}</Text>
+      </Pressable>
+      {!finished && questions.length > 0 ? (
+        <Text style={styles.progress}>
+          {t("themeQuiz.progress", { current: index + 1, total: questions.length })}
+        </Text>
+      ) : null}
+    </View>
+  ) : null;
+
   if (isLoading || !theme) {
     return (
-      <SafeAreaView style={styles.safe}>
+      <ScreenShell>
         <LoadingPlaceholder padding="lg" style={styles.center} />
-      </SafeAreaView>
+      </ScreenShell>
     );
   }
 
   if (questions.length === 0) {
     return (
-      <SafeAreaView style={styles.safe}>
+      <ScreenShell header={headerBar}>
         <View style={styles.center}>
           <Text style={styles.empty}>{t("themeQuiz.noQuestions")}</Text>
           <Pressable onPress={() => router.back()} style={styles.outlineBtn}>
             <Text style={styles.outlineBtnText}>{t("common.goBack")}</Text>
           </Pressable>
         </View>
-      </SafeAreaView>
+      </ScreenShell>
     );
   }
 
   if (finished) {
     return (
-      <SafeAreaView style={styles.safe}>
+      <ScreenShell header={headerBar}>
         <View style={styles.center}>
           <Text style={styles.doneTitle}>{t("common.completed")}</Text>
           <Text style={styles.score}>
@@ -85,24 +101,14 @@ export default function ThemeQuizStudyScreen() {
             <Text style={styles.outlineBtnText}>{t("common.goBack")}</Text>
           </Pressable>
         </View>
-      </SafeAreaView>
+      </ScreenShell>
     );
   }
 
   const isCorrect = revealed && selectedKey === q?.correctKey;
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()} style={styles.backRow}>
-          <ArrowLeft size={18} color={colors.appTextMuted} />
-          <Text style={styles.backTitle}>{theme.name}</Text>
-        </Pressable>
-        <Text style={styles.progress}>
-          {t("themeQuiz.progress", { current: index + 1, total: questions.length })}
-        </Text>
-      </View>
-
+    <ScreenShell header={headerBar} bottomInset>
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.prompt}>{q?.prompt}</Text>
 
@@ -175,25 +181,27 @@ export default function ThemeQuizStudyScreen() {
           </Pressable>
         )}
       </View>
-    </SafeAreaView>
+    </ScreenShell>
   );
 }
 
-function createStyles(theme: ReturnType<typeof useAppTheme>["theme"]) {
+function createStyles(
+  theme: ReturnType<typeof useAppTheme>["theme"],
+  colorScheme: ColorScheme,
+) {
   return StyleSheet.create({
-    safe: { flex: 1, backgroundColor: theme.appBg },
-    header: {
+    headerRow: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      paddingHorizontal: 16,
-      paddingVertical: 12,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: theme.appBorder,
-      backgroundColor: theme.appSurface,
     },
     backRow: { flexDirection: "row", alignItems: "center", gap: 6, flex: 1 },
-    backTitle: { fontSize: 14, fontWeight: "600", color: theme.appText, flex: 1 },
+    backTitle: {
+      fontSize: 14,
+      fontWeight: "600",
+      color: backTitleColor(theme, colorScheme),
+      flex: 1,
+    },
     progress: { fontSize: 12, fontWeight: "600", color: theme.appTextMuted },
     content: { padding: 20, gap: 16 },
     prompt: { fontSize: 20, fontWeight: "700", color: theme.appText, lineHeight: 28 },

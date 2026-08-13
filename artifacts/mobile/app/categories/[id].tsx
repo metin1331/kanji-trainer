@@ -256,9 +256,7 @@ export default function CategoryDetailScreen() {
     <View style={styles.wrap}>
       <WordListPanel
         title={category.name}
-        pageTitleIcon={
-          <CategoryIcon svg={category.iconSvg} size={14} color={theme.main400} />
-        }
+        iconSvg={category.iconSvg}
         toolbarExtra={toolbarExtra}
         onBack={() => router.back()}
         prefsScope={`/categories/${categoryId}`}

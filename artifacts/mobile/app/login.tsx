@@ -9,10 +9,11 @@ import {
   View,
 } from "react-native";
 import { useRouter } from "expo-router";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/auth/AuthProvider";
 import { DismissKeyboardView } from "@/components/DismissKeyboardView";
 import { FocusRingInput } from "@/components/FocusRingInput";
+import { ScreenShell } from "@/components/ScreenShell";
 import { useTranslation } from "@/i18n/I18nProvider";
 import { getApiOrigin } from "@/lib/apiConfig";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -24,6 +25,7 @@ export default function LoginScreen() {
   const styles = useMemo(() => createStyles(theme, colorScheme), [theme, colorScheme]);
   const { login } = useAuth();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -49,8 +51,8 @@ export default function LoginScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <DismissKeyboardView style={styles.flex}>
+    <ScreenShell bottomInset>
+      <DismissKeyboardView style={[styles.flex, { paddingTop: insets.top }]}>
         <KeyboardAvoidingView
           style={styles.flex}
           behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -99,7 +101,7 @@ export default function LoginScreen() {
           </View>
         </KeyboardAvoidingView>
       </DismissKeyboardView>
-    </SafeAreaView>
+    </ScreenShell>
   );
 }
 

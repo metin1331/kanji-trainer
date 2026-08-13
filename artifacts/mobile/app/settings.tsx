@@ -21,7 +21,7 @@ import {
   User,
 } from "lucide-react-native";
 import { useRouter } from "expo-router";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { ScreenShell } from "@/components/ScreenShell";
 import { Toggle } from "@/components/Toggle";
 import { useAuth } from "@/auth/AuthProvider";
 import { useAppSettings } from "@/hooks/useAppSettings";
@@ -43,6 +43,7 @@ import {
   SHADES,
   type PaletteName,
 } from "@/theme/palettes";
+import { navBackTitleStyle } from "@/theme/screenNavStyles";
 import { ColorScheme } from "@/settings/appSettings";
 
 type Section = "styling" | "srs" | "database" | "language" | "account";
@@ -138,56 +139,58 @@ export default function SettingsScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
-      <View style={styles.topBar}>
-        <Pressable
-          onPress={() => router.back()}
-          style={({ pressed }) => [styles.backRow, pressed && { opacity: 0.7 }]}
-        >
-          <ArrowLeft size={18} color={theme.appTextMuted} />
-          <Text style={styles.backTitle}>{t("settings.title")}</Text>
-        </Pressable>
-      </View>
-
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.sectionNav}
-        contentContainerStyle={styles.sectionNavContent}
-      >
-        {SECTIONS.map(({ id, labelKey, Icon }) => {
-          const active = section === id;
-          return (
-            <Pressable
-              key={id}
-              onPress={() => {
-                setSection(id);
-                setStatusMessage(null);
-              }}
-              style={({ pressed }) => [
-                styles.sectionChip,
-                active && styles.sectionChipActive,
-                pressed && { opacity: 0.85 },
-              ]}
-            >
-              <Icon
-                size={15}
-                color={active ? theme.main500 : theme.appTextSecondary}
-                strokeWidth={2}
-              />
-              <Text
-                style={[
-                  styles.sectionChipText,
-                  active && styles.sectionChipTextActive,
-                ]}
-              >
-                {t(labelKey)}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
-
+    <ScreenShell
+      header={
+        <>
+          <Pressable
+            onPress={() => router.back()}
+            style={({ pressed }) => [styles.backRow, pressed && { opacity: 0.7 }]}
+          >
+            <ArrowLeft size={18} color={theme.appTextMuted} />
+            <Text style={styles.backTitle}>{t("settings.title")}</Text>
+          </Pressable>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.sectionNav}
+            contentContainerStyle={styles.sectionNavContent}
+          >
+            {SECTIONS.map(({ id, labelKey, Icon }) => {
+              const active = section === id;
+              return (
+                <Pressable
+                  key={id}
+                  onPress={() => {
+                    setSection(id);
+                    setStatusMessage(null);
+                  }}
+                  style={({ pressed }) => [
+                    styles.sectionChip,
+                    active && styles.sectionChipActive,
+                    pressed && { opacity: 0.85 },
+                  ]}
+                >
+                  <Icon
+                    size={15}
+                    color={active ? theme.main500 : theme.appTextSecondary}
+                    strokeWidth={2}
+                  />
+                  <Text
+                    style={[
+                      styles.sectionChipText,
+                      active && styles.sectionChipTextActive,
+                    ]}
+                  >
+                    {t(labelKey)}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </>
+      }
+      headerStyle={styles.headerBlock}
+    >
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.content}
@@ -471,21 +474,17 @@ export default function SettingsScreen() {
           </>
         ) : null}
       </ScrollView>
-    </SafeAreaView>
+    </ScreenShell>
   );
 }
 
 function createStyles(theme: ReturnType<typeof useTheme>["theme"], colorScheme: ColorScheme) {
   const isDark = colorScheme === "dark";
   return StyleSheet.create({
-    safe: { flex: 1, backgroundColor: theme.appBg },
-    topBar: {
-      backgroundColor: theme.appSurface,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: theme.appBorder,
-      paddingHorizontal: 20,
-      paddingTop: 16,
-      paddingBottom: 12,
+    headerBlock: {
+      gap: 0,
+      paddingHorizontal: 0,
+      paddingBottom: 0,
     },
     backRow: {
       flexDirection: "row",
@@ -493,20 +492,14 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"], colorScheme: 
       gap: 6,
       alignSelf: "flex-start",
       padding: 4,
-      marginLeft: -4,
+      marginLeft: 16,
+      marginBottom: 12,
     },
-    backTitle: {
-      fontSize: 11,
-      fontWeight: "600",
-      letterSpacing: 1.5,
-      textTransform: "uppercase",
-      color: isDark ? theme.main600 : theme.main500,
-    },
+    backTitle: navBackTitleStyle(theme, colorScheme),
     sectionNav: {
       flexGrow: 0,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: theme.appBorder,
-      backgroundColor: theme.appSurface,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: theme.appBorder,
     },
     sectionNavContent: {
       paddingHorizontal: 16,
@@ -556,7 +549,9 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"], colorScheme: 
       padding: 12,
       backgroundColor: theme.appSurface,
     },
-    paletteCardSelected: { borderWidth: 2 },
+    paletteCardSelected: {
+      boxShadow: `0 0 0 0px ${isDark ? theme.main600 : theme.main500}`,
+    },
     paletteHeader: {
       flexDirection: "row",
       alignItems: "center",

@@ -9,7 +9,8 @@ import {
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ArrowLeft, Plus, Trash2 } from "lucide-react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { CategoryTitle } from "@/components/CategoryIcon";
+import { ScreenShell } from "@/components/ScreenShell";
 import type { ThemeQuizQuestion } from "@workspace/api-client-react";
 import { HintLinesEditor } from "@/components/HintLinesEditor";
 import { LoadingPlaceholder } from "@/components/LoadingPlaceholder";
@@ -66,26 +67,37 @@ export default function ThemeQuizEditorScreen() {
     }
   }
 
+  const headerBar = (
+    <View style={styles.headerRow}>
+      <Pressable onPress={() => router.back()} style={styles.backRow}>
+        <ArrowLeft size={18} color={colors.appTextMuted} />
+        <CategoryTitle
+          name={theme?.name ?? t("nav.themes")}
+          iconSvg={(theme as { iconSvg?: string | null } | undefined)?.iconSvg}
+          iconSize={14}
+          tone="nav"
+        />
+      </Pressable>
+      {theme ? (
+        <Pressable onPress={handleSave} disabled={saving} style={styles.saveBtn}>
+          <Text style={styles.saveBtnText}>
+            {saving ? t("common.loading") : t("common.done")}
+          </Text>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+
   if (isLoading || !theme) {
     return (
-      <SafeAreaView style={styles.safe}>
+      <ScreenShell header={headerBar}>
         <LoadingPlaceholder padding="lg" style={styles.center} />
-      </SafeAreaView>
+      </ScreenShell>
     );
   }
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()} style={styles.backRow}>
-          <ArrowLeft size={18} color={colors.appTextMuted} />
-          <Text style={styles.backTitle}>{theme.name}</Text>
-        </Pressable>
-        <Pressable onPress={handleSave} disabled={saving} style={styles.saveBtn}>
-          <Text style={styles.saveBtnText}>{saving ? t("common.loading") : t("common.done")}</Text>
-        </Pressable>
-      </View>
-
+    <ScreenShell header={headerBar}>
       <Text style={styles.pageTitle}>{t("themeQuiz.editTitle")}</Text>
 
       <ScrollView contentContainerStyle={styles.content}>
@@ -167,22 +179,19 @@ export default function ThemeQuizEditorScreen() {
           <Text style={styles.addQuestionText}>{t("themeQuiz.addQuestion")}</Text>
         </Pressable>
       </ScrollView>
-    </SafeAreaView>
+    </ScreenShell>
   );
 }
 
 function createStyles(theme: ReturnType<typeof useAppTheme>["theme"]) {
   return StyleSheet.create({
     safe: { flex: 1, backgroundColor: theme.appBg },
-    header: {
+    headerRow: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      paddingHorizontal: 16,
-      paddingTop: 8,
     },
-    backRow: { flexDirection: "row", alignItems: "center", gap: 6, padding: 4, flex: 1 },
-    backTitle: { fontSize: 14, fontWeight: "600", color: theme.appText, flex: 1 },
+    backRow: { flexDirection: "row", alignItems: "center", gap: 6, padding: 4, flex: 1, minWidth: 0 },
     saveBtn: { padding: 8 },
     saveBtnText: { fontSize: 15, fontWeight: "700", color: theme.main500 },
     pageTitle: {

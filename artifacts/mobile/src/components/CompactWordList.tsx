@@ -44,7 +44,7 @@ export function CompactWordList({
 
   return (
     <View style={[styles.box, { maxHeight }]}>
-      {/* {header ? <View style={styles.headerWrap}>{header}</View> : null} */}
+      {header ? <View style={styles.headerWrap}>{header}</View> : null}
       <ScrollView nestedScrollEnabled>
         {words.map((w) => {
           const isOpen = openIds.has(w.id);
