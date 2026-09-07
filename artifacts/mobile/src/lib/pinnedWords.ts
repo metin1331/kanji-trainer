@@ -18,9 +18,9 @@ export async function readPinnedIds(scope: string): Promise<number[]> {
   }
 }
 
-export async function writePinnedIds(scope: string, ids: number[]): Promise<void> {
+export async function clearPinnedIds(scope: string): Promise<void> {
   try {
-    await AsyncStorage.setItem(storageKey(scope), JSON.stringify(ids));
+    await AsyncStorage.removeItem(storageKey(scope));
   } catch {
     /* ignore */
   }

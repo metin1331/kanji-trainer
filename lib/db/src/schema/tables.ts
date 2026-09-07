@@ -322,3 +322,21 @@ export const categoryWordsTable = pgTable(
   },
   (t) => [primaryKey({ columns: [t.categoryId, t.wordId] })],
 );
+
+/** Per-list pinned words (scope matches client list keys, e.g. /words, meaning). */
+export const pinnedWordsTable = pgTable(
+  "pinned_words",
+  {
+    userId: integer("user_id")
+      .notNull()
+      .references(() => usersTable.id, { onDelete: "cascade" }),
+    scope: text("scope").notNull(),
+    wordId: integer("word_id")
+      .notNull()
+      .references(() => wordsTable.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.scope, t.wordId] })],
+);

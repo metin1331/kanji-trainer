@@ -88,7 +88,8 @@ export function LearnedPage() {
   const [sort, setSort] = useState<SortMode>("date-desc");
   const [showSortMenu, setShowSortMenu] = useState(false);
   const { selectedJlpt, toggleJlpt, clearJlpt } = useJlptFilter();
-  const { pinnedIds, togglePinMany, isPinned } = usePinnedWords("learned");
+  const { pinnedIds, togglePinMany, isPinned, ready: pinReady } =
+    usePinnedWords("learned");
   const [showForm, setShowForm] = useState(false);
   const [editingWord, setEditingWord] = useState<Word | undefined>(undefined);
 
@@ -190,7 +191,7 @@ export function LearnedPage() {
   const displayed = filterWords(
     partitionPinnedWords(
       filterByJlptLevels(sortLearned(starred, sort), selectedJlpt),
-      pinnedIds,
+      pinReady ? pinnedIds : new Set(),
     ),
     query,
   );

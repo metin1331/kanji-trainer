@@ -178,7 +178,8 @@ export function WordListPanel({
   const [visibleCount, setVisibleCount] = useState(savedPrefs.pageSize ?? 50);
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
-  const { pinnedIds, togglePinMany, isPinned } = usePinnedWords(studyReturnPath);
+  const { pinnedIds, togglePinMany, isPinned, ready: pinReady } =
+    usePinnedWords(studyReturnPath);
 
   const headerRef = useRef<HTMLDivElement>(null);
   const sortMenuRef = useRef<HTMLDivElement>(null);
@@ -226,8 +227,11 @@ export function WordListPanel({
     return searched.filter((w) => w.jlptLevel && selectedJlpt.has(w.jlptLevel));
   }, [searched, layout, selectedJlpt]);
   const orderedWords = useMemo(
-    () => partitionPinnedWords(filtered, pinnedIds),
-    [filtered, pinnedIds],
+    () =>
+      pinReady && pinnedIds.size > 0
+        ? partitionPinnedWords(filtered, pinnedIds)
+        : filtered,
+    [filtered, pinnedIds, pinReady],
   );
   const visibleWords = useMemo(
     () =>

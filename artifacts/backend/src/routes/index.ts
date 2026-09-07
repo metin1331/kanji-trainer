@@ -9,6 +9,7 @@ import themesRouter from "./themes";
 import backupRouter from "./backup";
 import studyActivityRouter from "./studyActivity";
 import categoriesRouter from "./categories";
+import pinnedWordsRouter from "./pinnedWords";
 
 const router: IRouter = Router();
 
@@ -24,6 +25,7 @@ protectedRouter.use(themesRouter);
 protectedRouter.use(backupRouter);
 protectedRouter.use(studyActivityRouter);
 protectedRouter.use(categoriesRouter);
+protectedRouter.use(pinnedWordsRouter);
 
 router.use(protectedRouter);
 

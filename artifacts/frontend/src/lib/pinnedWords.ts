@@ -16,11 +16,11 @@ export function readPinnedIds(scope: string): number[] {
   }
 }
 
-export function writePinnedIds(scope: string, ids: number[]): void {
+export function clearPinnedIds(scope: string): void {
   try {
-    localStorage.setItem(storageKey(scope), JSON.stringify(ids));
+    localStorage.removeItem(storageKey(scope));
   } catch {
-    /* ignore quota / private mode */
+    /* ignore */
   }
 }
 

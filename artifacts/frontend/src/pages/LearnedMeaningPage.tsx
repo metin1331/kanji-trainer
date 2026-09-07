@@ -238,7 +238,8 @@ export function LearnedMeaningPage() {
   const [sort, setSort] = useState<SortMode>("level-asc");
   const [showSortMenu, setShowSortMenu] = useState(false);
   const { selectedJlpt, toggleJlpt, clearJlpt } = useJlptFilter();
-  const { pinnedIds, togglePinMany, isPinned } = usePinnedWords("learned-meaning");
+  const { pinnedIds, togglePinMany, isPinned, ready: pinReady } =
+    usePinnedWords("learned-meaning");
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const headerRef = useRef<HTMLDivElement>(null);
@@ -312,7 +313,7 @@ export function LearnedMeaningPage() {
   const displayed = filterWords(
     partitionPinnedWords(
       filterByJlptLevels(sortWords(starred, sort), selectedJlpt),
-      pinnedIds,
+      pinReady ? pinnedIds : new Set(),
     ),
     query,
   );

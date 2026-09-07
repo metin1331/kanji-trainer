@@ -251,7 +251,8 @@ export function PronunciationPage() {
   const { selectedJlpt, toggleJlpt, clearJlpt } = useJlptFilter(
     savedPrefs.jlptLevels ?? [],
   );
-  const { pinnedIds, togglePinMany, isPinned } = usePinnedWords(prefsScope);
+  const { pinnedIds, togglePinMany, isPinned, ready: pinReady } =
+    usePinnedWords(prefsScope);
   const [showSortMenu, setShowSortMenu] = useState(false);
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -334,7 +335,7 @@ export function PronunciationPage() {
   const displayed = filterWords(
     partitionPinnedWords(
       filterByJlptLevels(sortWords(nonStarred, sort), selectedJlpt),
-      pinnedIds,
+      pinReady ? pinnedIds : new Set(),
     ),
     query,
   );

@@ -7,8 +7,9 @@ import {
   studyActivityTable,
   categoriesTable,
   categoryWordsTable,
+  pinnedWordsTable,
 } from "@workspace/db";
-import { and, eq, inArray, asc } from "drizzle-orm";
+import { eq, inArray, asc } from "drizzle-orm";
 import { getUserId } from "../middleware/auth";
 import { ownerOnly } from "../lib/userScope";
 
@@ -39,6 +40,7 @@ router.get("/backup", async (req, res, next) => {
       srsCards,
       studyActivity,
       categoryWords,
+      pinnedWords,
     ] = await Promise.all([
       wordIds.length > 0
         ? db
@@ -64,6 +66,11 @@ router.get("/backup", async (req, res, next) => {
             .from(categoryWordsTable)
             .where(inArray(categoryWordsTable.categoryId, categoryIds))
         : Promise.resolve([]),
+      db
+        .select()
+        .from(pinnedWordsTable)
+        .where(eq(pinnedWordsTable.userId, userId))
+        .orderBy(asc(pinnedWordsTable.scope), asc(pinnedWordsTable.wordId)),
     ]);
 
     res.json({
@@ -85,6 +92,10 @@ router.get("/backup", async (req, res, next) => {
       studyActivity,
       categories,
       categoryWords,
+      pinnedWords: pinnedWords.map((row) => ({
+        ...row,
+        createdAt: row.createdAt.toISOString(),
+      })),
     });
   } catch (err) {
     next(err);
