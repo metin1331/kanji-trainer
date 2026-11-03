@@ -14,7 +14,7 @@ export function TodaysLessonsWidget({
 
   return (
     <section className="glass-panel moji-lessons-widget p-5">
-      <h2 className="text-base font-semibold">{t("mojimori.study.todaysLessons")}</h2>
+      <h2 className="text-lg sm:text-base font-semibold">{t("mojimori.study.todaysLessons")}</h2>
       <p className="moji-lessons-widget__count">{today}</p>
       <p className="text-sm text-[var(--color-muted)]">
         {lessons.dailyRemaining == null

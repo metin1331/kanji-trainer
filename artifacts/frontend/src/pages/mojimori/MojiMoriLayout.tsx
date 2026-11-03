@@ -5,8 +5,10 @@ import {
   type FormEvent,
   type PointerEvent,
   type ReactNode,
+  type RefObject,
 } from "react";
-import { CircleUserRound, Moon, Sun } from "lucide-react";
+import { createPortal } from "react-dom";
+import { ChevronDown, CircleUserRound, Grip, Moon, Sun } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import { Link, useLocation, useSearch } from "wouter";
 import { NavigationMenu as NavigationMenuParts } from "@animate-ui/react/primitives/radix-ui";
@@ -197,6 +199,343 @@ function TypeBandMenu({
   );
 }
 
+type MobileSection = "levels" | "radical" | "kanji" | "vocabulary" | "account";
+
+const SECTION_MARK: Record<Exclude<MobileSection, "account">, string> = {
+  levels: "レベル",
+  radical: "部首",
+  kanji: "漢字",
+  vocabulary: "単語",
+};
+
+function MojiMobileNav({
+  dark,
+  onToggleTheme,
+  layerRef,
+  onMenuActive,
+}: {
+  dark: boolean;
+  onToggleTheme: () => void;
+  layerRef: RefObject<HTMLDivElement | null>;
+  onMenuActive: (active: boolean) => void;
+}) {
+  const { t } = useTranslation();
+  const [path, navigate] = useLocation();
+  const search = useSearch();
+  const bandKey = new URLSearchParams(search).get("band");
+  const [menuOn, setMenuOn] = useState(false);
+  const [menuPhase, setMenuPhase] = useState<"closed" | "open" | "closing">("closed");
+  const [section, setSection] = useState<MobileSection | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchDraft, setSearchDraft] = useState("");
+  const formRef = useRef<HTMLFormElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const currentLevel = Number(
+    path.match(/^\/mojimori\/levels\/(\d+)(?:\/|$)/)?.[1] ?? 0,
+  );
+  const themeLabel = dark
+    ? t("mojimori.nav.themeLight")
+    : t("mojimori.nav.themeDark");
+  const ThemeIcon = dark ? Sun : Moon;
+  const menuActive = menuPhase !== "closed";
+
+  useEffect(() => {
+    setMenuOn(false);
+    setMenuPhase("closed");
+    setSearchOpen(false);
+  }, [path, search]);
+
+  useEffect(() => {
+    onMenuActive(menuPhase !== "closed");
+  }, [menuPhase, onMenuActive]);
+
+  function openMenu() {
+    setSearchDraft("");
+    setSearchOpen(false);
+    setMenuOn(true);
+    setMenuPhase("closed");
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => setMenuPhase("open"));
+    });
+  }
+
+  function closeMenu() {
+    setMenuPhase((phase) => (phase === "open" ? "closing" : phase));
+  }
+
+  useEffect(() => {
+    if (!searchOpen) return;
+    inputRef.current?.focus();
+    const close = (event: Event) => {
+      if (!formRef.current?.contains(event.target as Node)) {
+        setSearchDraft("");
+        setSearchOpen(false);
+      }
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setSearchDraft("");
+        setSearchOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", close);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", close);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [searchOpen]);
+
+  useEffect(() => {
+    if (menuPhase !== "open") return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeMenu();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [menuPhase]);
+
+  useEffect(() => {
+    if (menuPhase !== "closing") return;
+    const timer = window.setTimeout(() => {
+      setMenuOn(false);
+      setMenuPhase("closed");
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [menuPhase]);
+
+  function submitSearch(event: FormEvent) {
+    event.preventDefault();
+    const query = searchDraft.trim();
+    if (!query) return;
+    navigate(`/mojimori/search?q=${encodeURIComponent(query)}`);
+    setSearchDraft("");
+    setSearchOpen(false);
+  }
+
+  function toggleSection(next: MobileSection) {
+    setSection((current) => (current === next ? null : next));
+  }
+
+  return (
+    <div className="moji-mobile-tools">
+      <form
+        ref={formRef}
+        className={`moji-mobile-search${menuActive ? " is-theme" : ""}${!menuActive && searchOpen ? " is-open" : ""}${searchDraft.trim() ? " has-query" : ""}`}
+        onSubmit={submitSearch}
+      >
+        <input
+          ref={inputRef}
+          value={searchDraft}
+          onChange={(event) => setSearchDraft(event.target.value)}
+          placeholder={t("mojimori.searchPlaceholder")}
+          aria-label={t("mojimori.nav.search")}
+          className="moji-mobile-search__input"
+          tabIndex={searchOpen ? 0 : -1}
+          onKeyDown={(event) => event.stopPropagation()}
+        />
+        <button
+          type={!menuActive && searchOpen && searchDraft.trim() ? "submit" : "button"}
+          className="moji-mobile-search__go"
+          aria-label={menuActive ? themeLabel : t("mojimori.nav.search")}
+          aria-expanded={searchOpen}
+          onClick={() => {
+            if (menuActive) {
+              onToggleTheme();
+              return;
+            }
+            if (searchOpen) return;
+            closeMenu();
+            setSearchOpen(true);
+          }}
+        >
+          <svg
+            className="moji-mobile-search__icon moji-mobile-search__icon--search"
+            stroke="currentColor"
+            fill="none"
+            strokeWidth="2"
+            viewBox="0 0 24 24"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <circle cx="11" cy="11" r="8" />
+            <path d="m21 21-4.3-4.3" />
+          </svg>
+          <svg
+            className="moji-mobile-search__icon moji-mobile-search__icon--go"
+            stroke="currentColor"
+            fill="none"
+            strokeWidth="2"
+            viewBox="0 0 24 24"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M5 12h14" />
+            <path d="m12 5 7 7-7 7" />
+          </svg>
+          <ThemeIcon className="moji-mobile-search__icon moji-mobile-search__icon--theme" size={18} aria-hidden="true" />
+        </button>
+      </form>
+      <button
+        type="button"
+        className={`moji-mobile-menu-btn${menuPhase !== "closed" ? " is-open" : ""}`}
+        aria-label={t("a11y.menu")}
+        aria-expanded={menuPhase === "open"}
+        onClick={() => {
+          if (menuPhase === "open") closeMenu();
+          else if (menuPhase === "closed") openMenu();
+        }}
+      >
+        <Grip className="moji-mobile-menu-btn__grip" size={18} aria-hidden="true" />
+        <svg
+          className="moji-mobile-menu-btn__close"
+          xmlns="http://www.w3.org/2000/svg"
+          width="24"
+          height="24"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="butt"
+          strokeLinejoin="miter"
+          aria-hidden="true"
+        >
+          <path d="M7.5 7.5L9.5 9.5" />
+          <path d="M16.5 7.5L14.5 9.5" />
+          <path d="M7.5 16.5L9.5 14.5" />
+          <path d="M16.5 16.5L14.5 14.5" />
+          <circle cx="5" cy="5" r="1" />
+          <circle cx="19" cy="5" r="1" />
+          <circle cx="12" cy="12" r="1" />
+          <circle cx="5" cy="19" r="1" />
+          <circle cx="19" cy="19" r="1" />
+        </svg>
+      </button>
+      {menuOn
+        ? createPortal(
+          <nav className={`moji-mobile-menu${menuPhase === "open" ? " is-open" : ""}`}>
+            {(["levels", "radical", "kanji", "vocabulary"] as const).map((key) => {
+              const open = section === key;
+              const label =
+                key === "levels"
+                  ? t("mojimori.nav.levels")
+                  : t(`mojimori.nav.${key === "radical" ? "radicals" : key}`);
+              return (
+                <section
+                  key={key}
+                  className={`moji-mobile-section${open ? " is-open" : ""}`}
+                  data-type={key}
+                >
+                  <button
+                    type="button"
+                    className="moji-mobile-section__toggle"
+                    aria-expanded={open}
+                    onClick={() => toggleSection(key)}
+                  >
+                    <span className="moji-mobile-section__mark">{SECTION_MARK[key]}</span>
+                    <span>{label}</span>
+                    <ChevronDown size={16} className="moji-mobile-section__chevron" />
+                  </button>
+                  <div className="moji-mobile-section__body">
+                    <div>
+                      {key === "levels" ? (
+                        <div className="moji-mobile-groups">
+                          {MOJI_MORI_LEVEL_BANDS.map((band) => (
+                            <div key={band.key} className="moji-mobile-group">
+                              <p className="moji-mobile-group__title">
+                                <span>{band.ja}</span>
+                                {t(`mojimori.bands.${band.key}`)}
+                              </p>
+                              <div className="moji-mobile-nums">
+                                {Array.from(
+                                  { length: band.end - band.start + 1 },
+                                  (_, index) => band.start + index,
+                                ).map((level) => (
+                                  <Link
+                                    key={level}
+                                    href={`/mojimori/levels/${level}`}
+                                    className={`moji-level-num${currentLevel === level ? " is-current" : ""}`}
+                                    onClick={() => setMenuOn(false)}
+                                  >
+                                    {String(level).padStart(2, "0")}
+                                  </Link>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="moji-mobile-links">
+                          {MOJI_MORI_LEVEL_BANDS.map((band) => {
+                            const href = `/mojimori/${key === "radical" ? "radicals" : key}`;
+                            const current =
+                              path === href &&
+                              (bandKey ? bandKey === band.key : band.key === "pleasant");
+                            const start = String(band.start).padStart(2, "0");
+                            const end = String(band.end).padStart(2, "0");
+                            return (
+                              <Link
+                                key={band.key}
+                                href={`${href}?band=${band.key}`}
+                                className={`moji-mobile-link${current ? " is-current" : ""}`}
+                                onClick={() => setMenuOn(false)}
+                              >
+                                <span className="moji-mobile-link__title">
+                                  <span className="moji-mobile-link__mark">{band.ja}</span>
+                                  {t(`mojimori.bands.${band.key}`)}
+                                </span>
+                                <span className="moji-mobile-link__range">
+                                  {t("mojimori.nav.levels")} {start}-{end}
+                                </span>
+                              </Link>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </section>
+              );
+            })}
+            <section
+              className={`moji-mobile-section moji-mobile-section--account${section === "account" ? " is-open" : ""}`}
+            >
+              <button
+                type="button"
+                className="moji-mobile-section__toggle"
+                aria-expanded={section === "account"}
+                onClick={() => toggleSection("account")}
+              >
+                <CircleUserRound size={18} />
+                <span>{t("mojimori.nav.account")}</span>
+                <ChevronDown size={16} className="moji-mobile-section__chevron" />
+              </button>
+              <div className="moji-mobile-section__body">
+                <div>
+                  <div className="moji-mobile-links">
+                    <Link
+                      href="/mojimori/settings"
+                      className="moji-mobile-link"
+                      onClick={() => setMenuOn(false)}
+                    >
+                      <span className="moji-mobile-link__title">
+                        {t("mojimori.nav.settings")}
+                      </span>
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </nav>,
+          layerRef.current ?? document.body,
+        )
+        : null}
+    </div>
+  );
+}
+
 export function MojiMoriLayout({
   children,
   showHeader = true,
@@ -225,6 +564,7 @@ export function MojiMoriLayout({
   const searchFormRef = useRef<HTMLFormElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [floatUserMenu, setFloatUserMenu] = useState("");
+  const [mobileMenu, setMobileMenu] = useState(false);
   const levelsActive =
     path === "/mojimori/levels" || path.startsWith("/mojimori/levels/");
   const currentLevel = Number(
@@ -271,7 +611,8 @@ export function MojiMoriLayout({
     const root = rootRef.current;
     if (!showHeader || !nav || !header || !root) return;
     const apply = () => {
-      const height = `${nav.getBoundingClientRect().height}px`;
+      const measured = nav.getBoundingClientRect().height;
+      const height = measured > 0 ? `${measured}px` : "2.75rem";
       header.style.setProperty("--nav-bar-h", height);
       root.style.setProperty("--nav-bar-h", height);
     };
@@ -348,7 +689,7 @@ export function MojiMoriLayout({
       {showHeader ? (
       <header
         ref={headerRef}
-        className={`moji-header${scrolled ? " is-scrolled" : ""}`}
+        className={`moji-header${scrolled ? " is-scrolled" : ""}${mobileMenu ? " is-menu-open" : ""}`}
       >
         <Link href="/mojimori" className="moji-float-logo nav-side">
           <span className="moji-mark">
@@ -610,6 +951,12 @@ export function MojiMoriLayout({
           </NavigationMenuList>
         </NavigationMenu>
         </div>
+        <MojiMobileNav
+          dark={dark}
+          onToggleTheme={toggleTheme}
+          layerRef={rootRef}
+          onMenuActive={setMobileMenu}
+        />
       </header>
       ) : null}
       <main className="mx-auto max-w-6xl px-4 py-6">{children}</main>

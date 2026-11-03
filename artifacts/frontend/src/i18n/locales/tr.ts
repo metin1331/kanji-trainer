@@ -714,6 +714,7 @@ export const tr: Messages = {
       search: "Ara",
       home: "Uygulamaya dön",
       user: "Kullanıcı",
+      account: "Hesap",
       settings: "Ayarlar",
       themeDark: "Karanlık mod",
       themeLight: "Aydınlık mod",

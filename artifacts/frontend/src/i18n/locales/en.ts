@@ -712,6 +712,7 @@ export const en = {
       search: "Search",
       home: "Back to app",
       user: "User",
+      account: "Account",
       settings: "Settings",
       themeDark: "Dark mode",
       themeLight: "Light mode",

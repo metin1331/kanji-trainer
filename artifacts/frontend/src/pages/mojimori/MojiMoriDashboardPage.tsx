@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { MojiMoriLoading } from "./MojiMoriLoading";
 import { useTranslation } from "../../i18n/I18nProvider";
 import {
+  mojiMoriSubjectsQuery,
   useMojiMoriDashboard,
   useMojiMoriSubjects,
 } from "../../hooks/useMojiMori";
@@ -130,6 +132,7 @@ function levelPercent(row: MojiMoriLevelProgress) {
 export function MojiMoriDashboardPage() {
   const { t } = useTranslation();
   const { data, isLoading } = useMojiMoriDashboard();
+  const queryClient = useQueryClient();
   const [sheet, setSheet] = useState<MojiMoriObjectType | null>(null);
   const [phase, setPhase] = useState<"closed" | "open" | "closing">("closed");
   const [viewLevel, setViewLevel] = useState<number | null>(null);
@@ -139,6 +142,15 @@ export function MojiMoriDashboardPage() {
     { level: activeLevel, type: sheet ?? "radical" },
     Boolean(sheet && data && activeLevel),
   );
+
+  useEffect(() => {
+    if (!activeLevel) return;
+    for (const type of ["radical", "kanji", "vocabulary"] as const) {
+      void queryClient.prefetchQuery(
+        mojiMoriSubjectsQuery({ level: activeLevel, type }),
+      );
+    }
+  }, [activeLevel, queryClient]);
 
   useEffect(() => {
     if (!sheet || phase !== "closed") return;
@@ -184,7 +196,7 @@ export function MojiMoriDashboardPage() {
           {data.study ? <MojiMoriStudyWidgets study={data.study} /> : null}
           <section className="glass-panel p-5">
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-base font-semibold tracking-tight">
+              <h2 className="text-lg sm:text-base font-semibold tracking-tight">
                 {t("mojimori.itemSpread")}
               </h2>
               <span className="flex gap-3 text-xs font-bold">
@@ -219,8 +231,8 @@ export function MojiMoriDashboardPage() {
 
           <section className="glass-panel level-progress">
             <div className="p-5">
-            <div className="mb-1 flex items-center justify-between gap-3">
-              <h2 className="text-base font-semibold tracking-tight">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h2 className="text-lg sm:text-base font-semibold tracking-tight">
                 {t("mojimori.levelProgress")}
               </h2>
               <div className="level-switch flex items-stretch gap-1">
@@ -229,6 +241,7 @@ export function MojiMoriDashboardPage() {
                   className="moji-btn"
                   disabled={!activeLevel || activeLevel <= 1}
                   aria-label={t("mojimori.levelPrev")}
+                  onPointerUp={(event) => event.currentTarget.blur()}
                   onClick={() => {
                     if (!activeLevel || activeLevel <= 1) return;
                     setViewLevel(activeLevel - 1);
@@ -241,6 +254,7 @@ export function MojiMoriDashboardPage() {
                   type="button"
                   className="moji-btn"
                   aria-expanded={levelMenu}
+                  onPointerUp={(event) => event.currentTarget.blur()}
                   onClick={() => setLevelMenu((open) => !open)}
                 >
                   {t("mojimori.levelChip", {
@@ -252,6 +266,7 @@ export function MojiMoriDashboardPage() {
                   className="moji-btn"
                   disabled={!activeLevel || activeLevel >= MAX_LEVEL}
                   aria-label={t("mojimori.levelNext")}
+                  onPointerUp={(event) => event.currentTarget.blur()}
                   onClick={() => {
                     if (!activeLevel || activeLevel >= MAX_LEVEL) return;
                     setViewLevel(activeLevel + 1);

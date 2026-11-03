@@ -23,7 +23,7 @@ export function MojiMoriStudyWidgets({ study }: { study: MojiMoriStudySnapshot }
       <section className="grid gap-3 sm:grid-cols-2">
         <TodaysLessonsWidget lessons={study.lessons} />
         <div className="glass-panel p-5">
-          <h2 className="text-base font-semibold">{t("mojimori.study.reviewsTitle")}</h2>
+          <h2 className="text-lg sm:text-base font-semibold">{t("mojimori.study.reviewsTitle")}</h2>
           <p className="mt-2 text-3xl font-semibold">{study.reviews.due}</p>
           <p className="text-sm text-[var(--color-muted)]">
             {t("mojimori.study.apprenticeDue", { count: study.reviews.apprenticeDue })}
@@ -37,7 +37,7 @@ export function MojiMoriStudyWidgets({ study }: { study: MojiMoriStudySnapshot }
       <ForecastPanel forecast={study.forecast} />
 
       <section className="glass-panel p-5">
-        <h2 className="mb-3 text-base font-semibold">{t("mojimori.study.extraTitle")}</h2>
+        <h2 className="mb-3 text-lg sm:text-base font-semibold">{t("mojimori.study.extraTitle")}</h2>
         <div className="flex flex-wrap gap-2">
           <Link href="/mojimori/extra?mode=recent-lessons" className="moji-btn">
             {t("mojimori.study.recentLessons", { count: study.extra.recentLessons })}
@@ -67,7 +67,7 @@ export function MojiMoriStudyWidgets({ study }: { study: MojiMoriStudySnapshot }
       </section>
 
       <section className="glass-panel p-5">
-        <h2 className="mb-3 text-base font-semibold">{t("mojimori.study.heatmap")}</h2>
+        <h2 className="mb-3 text-lg sm:text-base font-semibold">{t("mojimori.study.heatmap")}</h2>
         <div className="overflow-x-auto">
           <div className="moji-heat">
             {study.heatmap.map((cell) => (
@@ -84,7 +84,7 @@ export function MojiMoriStudyWidgets({ study }: { study: MojiMoriStudySnapshot }
       </section>
 
       <section className="glass-panel p-5">
-        <h2 className="mb-3 text-base font-semibold">{t("mojimori.study.lists")}</h2>
+        <h2 className="mb-3 text-lg sm:text-base font-semibold">{t("mojimori.study.lists")}</h2>
         <ListColumn title={t("mojimori.study.cooked30")} items={study.lists.cooked} />
         <ListColumn title={t("mojimori.study.unlocked30")} items={study.lists.unlocked} />
         <ListColumn
@@ -97,7 +97,7 @@ export function MojiMoriStudyWidgets({ study }: { study: MojiMoriStudySnapshot }
       </section>
 
       <section className="glass-panel p-5">
-        <h2 className="text-base font-semibold">{t("mojimori.study.streak")}</h2>
+        <h2 className="text-lg sm:text-base font-semibold">{t("mojimori.study.streak")}</h2>
         <p className="mt-2 text-sm">
           {t("mojimori.study.streakNow", {
             current: study.streak.current,
@@ -284,7 +284,7 @@ function StatList({
   const { t } = useTranslation();
   return (
     <section className="glass-panel p-5">
-      <h2 className="mb-2 text-base font-semibold">{title}</h2>
+      <h2 className="mb-2 text-lg sm:text-base font-semibold">{title}</h2>
       <ul className="space-y-1 text-sm">
         {rows.map((row) => (
           <li key={row.key} className="flex justify-between gap-3">

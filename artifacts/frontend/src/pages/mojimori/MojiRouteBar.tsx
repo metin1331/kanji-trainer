@@ -22,7 +22,7 @@ export function MojiRouteBar() {
 
   return (
     <div
-      className="pointer-events-none fixed inset-x-0 top-0 z-[400] h-1 overflow-hidden"
+      className="pointer-events-none fixed inset-x-0 top-[3.20rem] min-[960px]:top-0 z-[400] h-1 overflow-hidden"
       role="progressbar"
       aria-label="Loading"
       aria-valuemin={0}
@@ -30,7 +30,7 @@ export function MojiRouteBar() {
       aria-valuenow={Math.round(snap.value)}
     >
       <motion.div
-        className="bg-brand h-full w-full rounded-r-full"
+        className="bg-brand h-full w-full"
         initial={false}
         animate={{ transform: `translateX(${snap.value - 100}%)` }}
         transition={
