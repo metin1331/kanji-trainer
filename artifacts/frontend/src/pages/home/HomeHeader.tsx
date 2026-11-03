@@ -59,7 +59,7 @@ export function HomeHeader({
         <p className="text-main-400 dark:text-main-500 text-[11px] font-semibold tracking-widest uppercase">
           {t("home.appSubtitle")}
         </p>
-        <div className="-mt-1 -mr-2 flex items-center gap-4">
+        <div className="-mt-1 -mr-2 flex items-center gap-2">
           <button
             onClick={() => navigate("/mojimori")}
             className="box-border inline-flex h-7 items-center justify-center rounded-md px-2 text-sm font-semibold transition-transform hover:scale-105"
