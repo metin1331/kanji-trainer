@@ -130,15 +130,18 @@ export type MojiMoriDashboard = {
     grandmaster: MojiMoriTypeCounts;
     legendary: MojiMoriTypeCounts;
   };
-  levelProgress: {
-    level: number;
-    radical: { guru: number; total: number };
-    kanji: { guru: number; total: number };
-    vocabulary: { guru: number; total: number };
-    kanjiNeeded: number;
-    kanjiRemaining: number;
-  };
+  levelProgress: MojiMoriLevelProgress;
+  levelStats?: MojiMoriLevelProgress[];
   study?: MojiMoriStudySnapshot;
+};
+
+export type MojiMoriLevelProgress = {
+  level: number;
+  radical: { guru: number; total: number };
+  kanji: { guru: number; total: number };
+  vocabulary: { guru: number; total: number };
+  kanjiNeeded: number;
+  kanjiRemaining: number;
 };
 
 export type MojiMoriStudyCard = {
@@ -186,8 +189,23 @@ export type MojiMoriStudySnapshot = {
   };
   lessons: { available: number; dailyRemaining: number | null; batchSize: number };
   reviews: { due: number; apprenticeDue: number };
-  forecast: { hours: { at: string; count: number }[]; days: { date: string; count: number }[] };
-  mistakes: { subjectId: number; characters: string | null; objectType: string; count: number }[];
+  forecast: {
+    next24: number;
+    days: { date: string; count: number; hours: { at: string; count: number }[] }[];
+  };
+  mistakes: {
+    subjectId: number;
+    characters: string | null;
+    objectType: string;
+    count: number;
+    level: number;
+    slug: string;
+    primaryMeaning: string;
+    primaryReading: string;
+    characterImages: MojiMoriCharacterImage[];
+    lessonPosition: number;
+    srsStage: number;
+  }[];
   extra: { recentLessons: number; recentMistakes: number; cooked: number };
   completed: { key: string; current: number | null; previous: number | null }[];
   accuracy: { key: string; current: number | null; previous: number | null }[];

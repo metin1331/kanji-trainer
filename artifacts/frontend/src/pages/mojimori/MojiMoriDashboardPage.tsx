@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight, SquareChevronRight } from "lucide-react";
-import { useLocation } from "wouter";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { MojiMoriLoading } from "./MojiMoriLoading";
 import { useTranslation } from "../../i18n/I18nProvider";
 import {
@@ -8,8 +7,10 @@ import {
   useMojiMoriSubjects,
 } from "../../hooks/useMojiMori";
 import {
+  MOJI_MORI_LEVEL_BANDS,
   MOJI_MORI_TYPE_COLORS,
   SRS_GROUPS,
+  type MojiMoriLevelProgress,
   type MojiMoriObjectType,
   type MojiMoriTypeCounts,
 } from "../../lib/mojiMori";
@@ -38,15 +39,105 @@ function TypePills({ counts }: { counts: MojiMoriTypeCounts }) {
   );
 }
 
+function LevelBody({
+  progress,
+  onOpen,
+}: {
+  progress: MojiMoriLevelProgress;
+  onOpen: (type: MojiMoriObjectType) => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <>
+      <p className="mb-4 text-sm text-[var(--color-muted)]">
+        {t("mojimori.guruInLevel")}
+      </p>
+      <div className="grid gap-2 sm:grid-cols-3">
+        {(
+          [
+            ["radical", "radicals"],
+            ["kanji", "kanji"],
+            ["vocabulary", "vocabulary"],
+          ] as const
+        ).map(([type]) => {
+          const row = progress[type];
+          return (
+            <button
+              key={type}
+              type="button"
+              onClick={() => onOpen(type)}
+              data-type={type}
+              className="level-type-card p-3 text-left hover:cursor-pointer"
+            >
+              <div className="mb-2 flex items-center gap-2 font-light">
+                <span
+                  className="inline-flex h-7 w-7 items-center justify-center rounded border text-[14px] leading-none font-thin text-white"
+                  style={{
+                    background: `var(--color-${type})`,
+                    borderColor: `var(--color-${type}-dark)`,
+                  }}
+                >
+                  {type === "radical" ? "大" : type === "kanji" ? "字" : "言"}
+                </span>
+                {t(`mojimori.types.${type}`)}
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="font-semibold">
+                  {row.guru}/{row.total}
+                </span>
+              </div>
+              <div className="mt-2 h-1.5 overflow-hidden -mx-3 bg-[var(--color-line)]">
+                <div
+                  className="h-full"
+                  style={{
+                    width: row.total ? `${(row.guru / row.total) * 100}%` : "0%",
+                    background: MOJI_MORI_TYPE_COLORS[type],
+                  }}
+                />
+              </div>
+            </button>
+          );
+        })}
+      </div>
+      <p className="mt-4 text-sm">
+        {progress.kanjiRemaining > 0
+          ? t("mojimori.kanjiToLevelUp", { count: progress.kanjiRemaining })
+          : t("mojimori.levelReady")}
+      </p>
+      <div className="study-progress__track mt-2">
+        {Array.from({ length: Math.max(progress.kanjiNeeded, 1) }, (_, index) => (
+          <span
+            key={index}
+            className={`study-progress__step${
+              index < progress.kanji.guru ? " study-progress__step--completed" : ""
+            }`}
+          />
+        ))}
+      </div>
+    </>
+  );
+}
+
+const MAX_LEVEL = MOJI_MORI_LEVEL_BANDS[MOJI_MORI_LEVEL_BANDS.length - 1]?.end ?? 60;
+
+function levelPercent(row: MojiMoriLevelProgress) {
+  const total = row.radical.total + row.kanji.total + row.vocabulary.total;
+  const done = row.radical.guru + row.kanji.guru + row.vocabulary.guru;
+  if (!total) return 0;
+  return (done / total) * 100;
+}
+
 export function MojiMoriDashboardPage() {
   const { t } = useTranslation();
-  const [, navigate] = useLocation();
   const { data, isLoading } = useMojiMoriDashboard();
   const [sheet, setSheet] = useState<MojiMoriObjectType | null>(null);
   const [phase, setPhase] = useState<"closed" | "open" | "closing">("closed");
+  const [viewLevel, setViewLevel] = useState<number | null>(null);
+  const [levelMenu, setLevelMenu] = useState(false);
+  const activeLevel = viewLevel ?? data?.level ?? data?.levelProgress.level;
   const sheetQuery = useMojiMoriSubjects(
-    { level: data?.levelProgress.level, type: sheet ?? "radical" },
-    Boolean(sheet && data),
+    { level: activeLevel, type: sheet ?? "radical" },
+    Boolean(sheet && data && activeLevel),
   );
 
   useEffect(() => {
@@ -128,97 +219,96 @@ export function MojiMoriDashboardPage() {
 
           <section className="glass-panel level-progress">
             <div className="p-5">
-            <div className="mb-1 flex items-center justify-between">
+            <div className="mb-1 flex items-center justify-between gap-3">
               <h2 className="text-base font-semibold tracking-tight">
                 {t("mojimori.levelProgress")}
               </h2>
-              <button
-                type="button"
-                onClick={() =>
-                  navigate(`/mojimori/levels/${data.levelProgress.level}`)
-                }
-                className="moji-btn"
-              >
-                {t("mojimori.levelChip", { level: data.levelProgress.level })}
-                <ChevronRight size={14} />
-              </button>
+              <div className="level-switch flex items-stretch gap-1">
+                <button
+                  type="button"
+                  className="moji-btn"
+                  disabled={!activeLevel || activeLevel <= 1}
+                  aria-label={t("mojimori.levelPrev")}
+                  onClick={() => {
+                    if (!activeLevel || activeLevel <= 1) return;
+                    setViewLevel(activeLevel - 1);
+                    setLevelMenu(false);
+                  }}
+                >
+                  <ChevronLeft size={14} />
+                </button>
+                <button
+                  type="button"
+                  className="moji-btn"
+                  aria-expanded={levelMenu}
+                  onClick={() => setLevelMenu((open) => !open)}
+                >
+                  {t("mojimori.levelChip", {
+                    level: activeLevel ?? data.levelProgress.level,
+                  })}
+                </button>
+                <button
+                  type="button"
+                  className="moji-btn"
+                  disabled={!activeLevel || activeLevel >= MAX_LEVEL}
+                  aria-label={t("mojimori.levelNext")}
+                  onClick={() => {
+                    if (!activeLevel || activeLevel >= MAX_LEVEL) return;
+                    setViewLevel(activeLevel + 1);
+                    setLevelMenu(false);
+                  }}
+                >
+                  <ChevronRight size={14} />
+                </button>
+              </div>
             </div>
-            <p className="mb-4 text-sm text-[var(--color-muted)]">
-              {t("mojimori.guruInLevel")}
-            </p>
-            <div className="grid gap-2 sm:grid-cols-3">
-              {(
-                [
-                  ["radical", "radicals"],
-                  ["kanji", "kanji"],
-                  ["vocabulary", "vocabulary"],
-                ] as const
-              ).map(([type]) => {
-                const row = data.levelProgress[type];
-                return (
-                  <button
-                    key={type}
-                    type="button"
-                    onClick={() => openSheet(type)}
-                    data-type={type}
-                    className="level-type-card p-3 text-left hover:cursor-pointer"
-                  >
-                    <div className="mb-2 flex items-center gap-2 font-light">
-                      <span
-                        className="inline-flex h-7 w-7 items-center justify-center rounded border text-[14px] leading-none font-thin text-white"
-                        style={{
-                          background: `var(--color-${type})`,
-                          borderColor: `var(--color-${type}-dark)`,
-                        }}
-                      >
-                        {type === "radical" ? "大" : type === "kanji" ? "字" : "言"}
-                      </span>
-                      {t(`mojimori.types.${type}`)}
+            <div className="level-progress__body">
+              <div inert={levelMenu || undefined} className={levelMenu ? "invisible" : undefined}>
+                <LevelBody
+                  progress={
+                    data.levelStats?.find((item) => item.level === activeLevel) ??
+                    data.levelProgress
+                  }
+                  onOpen={openSheet}
+                />
+              </div>
+              {levelMenu ? (
+                <div className="moji-level-menu moji-level-menu--widget">
+                  {MOJI_MORI_LEVEL_BANDS.map((band) => (
+                    <div key={band.key} className="moji-level-nums">
+                      {Array.from(
+                        { length: band.end - band.start + 1 },
+                        (_, index) => band.start + index,
+                      ).map((level) => {
+                        const row =
+                          data.levelStats?.find((item) => item.level === level) ??
+                          (level === data.levelProgress.level
+                            ? data.levelProgress
+                            : null);
+                        const percent = row ? levelPercent(row) : 0;
+                        return (
+                          <button
+                            key={level}
+                            type="button"
+                            className={`moji-level-num is-pick${
+                              activeLevel === level ? " is-current" : ""
+                            }`}
+                            onClick={() => {
+                              setViewLevel(level);
+                              setLevelMenu(false);
+                            }}
+                          >
+                            {String(level).padStart(2, "0")}
+                            <span className="level-pick-bar" aria-hidden="true">
+                              <span style={{ width: `${percent}%` }} />
+                            </span>
+                          </button>
+                        );
+                      })}
                     </div>
-                    <div className="flex items-center justify-between">
-                      <span className="font-semibold">
-                        {row.guru}/{row.total}
-                      </span>
-                      <span className="font-medium text-[var(--color-muted)]">
-                        {/* {t("mojimori.seeAll")} */}
-                      </span>
-                    </div>
-                    <div className="mt-2 h-1.5 overflow-hidden -mx-3 bg-[var(--color-line)]">
-                      <div
-                        className="h-full"
-                        style={{
-                          width: row.total
-                            ? `${(row.guru / row.total) * 100}%`
-                            : "0%",
-                          background: MOJI_MORI_TYPE_COLORS[type],
-                        }}
-                      />
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-            <p className="mt-4 text-sm">
-              {data.levelProgress.kanjiRemaining > 0
-                ? t("mojimori.kanjiToLevelUp", {
-                    count: data.levelProgress.kanjiRemaining,
-                  })
-                : t("mojimori.levelReady")}
-            </p>
-            <div className="study-progress__track mt-2">
-              {Array.from(
-                { length: Math.max(data.levelProgress.kanjiNeeded, 1) },
-                (_, index) => (
-                  <span
-                    key={index}
-                    className={`study-progress__step${
-                      index < data.levelProgress.kanji.guru
-                        ? " study-progress__step--completed"
-                        : ""
-                    }`}
-                  />
-                ),
-              )}
+                  ))}
+                </div>
+              ) : null}
             </div>
 
             </div>

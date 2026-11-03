@@ -401,42 +401,59 @@ export async function getMojiMoriDashboard(userId: number) {
     addCount(spread[group], row.objectType, Number(row.count));
   }
 
-  const subjects = await db
+  const grouped = await db
     .select({
-      id: mojiMoriSubjectsTable.id,
-      objectType: mojiMoriSubjectsTable.objectType,
-      componentSubjectIds: mojiMoriSubjectsTable.componentSubjectIds,
       level: mojiMoriSubjectsTable.level,
+      objectType: mojiMoriSubjectsTable.objectType,
+      total: sql<number>`count(*)::int`,
+      guru: sql<number>`count(*) filter (where coalesce(${mojiMoriProgressTable.srsStage}, 0) >= ${GURU_STAGE})::int`,
     })
     .from(mojiMoriSubjectsTable)
-    .where(eq(mojiMoriSubjectsTable.level, level));
+    .leftJoin(
+      mojiMoriProgressTable,
+      and(
+        eq(mojiMoriProgressTable.subjectId, mojiMoriSubjectsTable.id),
+        eq(mojiMoriProgressTable.userId, userId),
+      ),
+    )
+    .groupBy(mojiMoriSubjectsTable.level, mojiMoriSubjectsTable.objectType);
 
-  const context = await unlockContextFor(userId, subjects);
-  const totals = emptyCounts();
-  const passed = emptyCounts();
-  for (const subject of subjects) {
-    addCount(totals, subject.objectType, 1);
-    const view = progressView(
-      subject,
-      context.userLevel,
-      context.catalog,
-      context.stageOf,
-      context.progress.get(subject.id),
-    );
-    if (view.passed) addCount(passed, subject.objectType, 1);
-  }
+  const levelStats = buildLevelStats(grouped);
+  const levelProgress =
+    levelStats.find((item) => item.level === level) ?? emptyLevelProgress(level);
+  return { level, spread, levelProgress, levelStats };
+}
 
-  const kanjiNeeded = Math.ceil(totals.kanji * 0.9);
+const LEVEL_COUNT = 60;
+
+function emptyLevelProgress(level: number) {
   return {
     level,
-    spread,
-    levelProgress: {
-      level,
-      radical: { guru: passed.radical, total: totals.radical },
-      kanji: { guru: passed.kanji, total: totals.kanji },
-      vocabulary: { guru: passed.vocabulary, total: totals.vocabulary },
-      kanjiNeeded,
-      kanjiRemaining: Math.max(0, kanjiNeeded - passed.kanji),
-    },
+    radical: { guru: 0, total: 0 },
+    kanji: { guru: 0, total: 0 },
+    vocabulary: { guru: 0, total: 0 },
+    kanjiNeeded: 0,
+    kanjiRemaining: 0,
   };
+}
+
+function buildLevelStats(
+  rows: { level: number; objectType: string; total: number; guru: number }[],
+) {
+  const levels = Array.from({ length: LEVEL_COUNT }, (_, index) =>
+    emptyLevelProgress(index + 1),
+  );
+  for (const row of rows) {
+    const slot = levels[row.level - 1];
+    if (!slot) continue;
+    const type = row.objectType;
+    if (type === "radical" || type === "kanji" || type === "vocabulary") {
+      slot[type] = { guru: Number(row.guru), total: Number(row.total) };
+    }
+  }
+  for (const slot of levels) {
+    slot.kanjiNeeded = Math.ceil(slot.kanji.total * 0.9);
+    slot.kanjiRemaining = Math.max(0, slot.kanjiNeeded - slot.kanji.guru);
+  }
+  return levels;
 }

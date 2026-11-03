@@ -320,6 +320,11 @@ function primaryMeaning(meanings: SubjectRow["meanings"]): string {
   return row?.meaning ?? "";
 }
 
+function primaryReading(readings: SubjectRow["readings"]): string {
+  const row = readings.find((item) => item.primary) ?? readings[0];
+  return row?.reading ?? "";
+}
+
 function firstImage(images: SubjectRow["characterImages"]): string | null {
   return images.find((image) => image.url)?.url ?? null;
 }
@@ -769,28 +774,31 @@ export async function studySnapshot(userId: number) {
 }
 
 function buildForecast(times: Date[], now: Date) {
-  const hours = Array.from({ length: 24 }, (_, index) => {
-    const at = new Date(now);
-    at.setMinutes(0, 0, 0);
-    at.setHours(at.getHours() + index);
-    return { at: at.toISOString(), count: 0 };
-  });
-  const days = Array.from({ length: 5 }, (_, index) => ({
-    date: dateKey(addDays(startOfDay(now), index)),
-    count: 0,
-  }));
-  for (const time of times) {
-    const hour = hours.find((slot) => {
-      const start = new Date(slot.at);
-      const end = new Date(start);
-      end.setHours(end.getHours() + 1);
-      return time >= start && time < end;
+  const start = startOfDay(now);
+  const days = Array.from({ length: 5 }, (_, index) => {
+    const day = addDays(start, index);
+    const hours = Array.from({ length: 24 }, (_, hour) => {
+      const at = new Date(day);
+      at.setHours(hour, 0, 0, 0);
+      return { at: at.toISOString(), count: 0 };
     });
-    if (hour) hour.count += 1;
+    return { date: dateKey(day), count: 0, hours };
+  });
+  for (const time of times) {
     const day = days.find((item) => item.date === dateKey(time));
-    if (day) day.count += 1;
+    if (!day) continue;
+    const slot = day.hours.find((hour) => {
+      const startAt = new Date(hour.at);
+      const end = new Date(startAt);
+      end.setHours(end.getHours() + 1);
+      return time >= startAt && time < end;
+    });
+    if (slot) slot.count += 1;
+    day.count += 1;
   }
-  return { hours, days };
+  const next24End = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  const next24 = times.filter((time) => time >= now && time < next24End).length;
+  return { next24, days };
 }
 
 async function recentMistakes(userId: number) {
@@ -801,11 +809,25 @@ async function recentMistakes(userId: number) {
       correct: mojiMoriReviewsTable.correct,
       characters: mojiMoriSubjectsTable.characters,
       objectType: mojiMoriSubjectsTable.objectType,
+      level: mojiMoriSubjectsTable.level,
+      slug: mojiMoriSubjectsTable.slug,
+      meanings: mojiMoriSubjectsTable.meanings,
+      readings: mojiMoriSubjectsTable.readings,
+      characterImages: mojiMoriSubjectsTable.characterImages,
+      lessonPosition: mojiMoriSubjectsTable.lessonPosition,
+      srsStage: mojiMoriProgressTable.srsStage,
     })
     .from(mojiMoriReviewsTable)
     .innerJoin(
       mojiMoriSubjectsTable,
       eq(mojiMoriReviewsTable.subjectId, mojiMoriSubjectsTable.id),
+    )
+    .leftJoin(
+      mojiMoriProgressTable,
+      and(
+        eq(mojiMoriProgressTable.subjectId, mojiMoriSubjectsTable.id),
+        eq(mojiMoriProgressTable.userId, userId),
+      ),
     )
     .where(
       and(
@@ -817,7 +839,19 @@ async function recentMistakes(userId: number) {
     .orderBy(asc(mojiMoriReviewsTable.createdAt));
   const bySubject = new Map<
     number,
-    { subjectId: number; characters: string | null; objectType: string; count: number }
+    {
+      subjectId: number;
+      characters: string | null;
+      objectType: string;
+      count: number;
+      level: number;
+      slug: string;
+      primaryMeaning: string;
+      primaryReading: string;
+      characterImages: SubjectRow["characterImages"];
+      lessonPosition: number;
+      srsStage: number;
+    }
   >();
   for (const row of rows) {
     const current = bySubject.get(row.subjectId) ?? {
@@ -825,6 +859,13 @@ async function recentMistakes(userId: number) {
       characters: row.characters,
       objectType: row.objectType,
       count: 0,
+      level: row.level,
+      slug: row.slug,
+      primaryMeaning: primaryMeaning(row.meanings),
+      primaryReading: primaryReading(row.readings),
+      characterImages: row.characterImages,
+      lessonPosition: row.lessonPosition,
+      srsStage: row.srsStage ?? 0,
     };
     current.count = row.correct ? 0 : current.count + 1;
     bySubject.set(row.subjectId, current);

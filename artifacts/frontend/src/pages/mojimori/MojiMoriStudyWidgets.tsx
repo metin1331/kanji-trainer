@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Link } from "wouter";
 import { useTranslation } from "../../i18n/I18nProvider";
-import type { MojiMoriStudySnapshot } from "../../lib/mojiMori";
-import { mojiMoriSubjectHref } from "../../lib/mojiMori";
+import type { MojiMoriStudySnapshot, MojiMoriSubjectSummary } from "../../lib/mojiMori";
 import { TodaysLessonsWidget } from "./TodaysLessonsWidget";
+import { LevelSubjectCard } from "./SubjectTile";
 
 function heatLevel(count: number) {
   if (count <= 0) return 0;
@@ -16,7 +17,6 @@ function heatLevel(count: number) {
 export function MojiMoriStudyWidgets({ study }: { study: MojiMoriStudySnapshot }) {
   const { t } = useTranslation();
   const [lockedDate, setLockedDate] = useState<string | null>(null);
-  const forecastTotal = study.forecast.hours.reduce((sum, hour) => sum + hour.count, 0);
 
   return (
     <div className="space-y-5">
@@ -34,49 +34,7 @@ export function MojiMoriStudyWidgets({ study }: { study: MojiMoriStudySnapshot }
         </div>
       </section>
 
-      <section className="glass-panel p-5">
-        <h2 className="text-base font-semibold">{t("mojimori.study.forecast")}</h2>
-        <p className="mt-1 text-sm text-[var(--color-muted)]">
-          {t("mojimori.study.forecastDay", { count: forecastTotal })}
-        </p>
-        <div className="mt-3 grid grid-cols-5 gap-2">
-          {study.forecast.days.map((day) => (
-            <div key={day.date} className="rounded-lg bg-white/70 px-2 py-2 text-center text-sm">
-              <div className="text-[var(--color-muted)]">{day.date.slice(5)}</div>
-              <div className="font-semibold">{day.count}</div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="glass-panel p-5">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-base font-semibold">{t("mojimori.study.mistakes")}</h2>
-          <Link href="/mojimori/extra?mode=recent-mistakes" className="moji-btn">
-            {t("mojimori.study.extraTitle")}
-          </Link>
-        </div>
-        {study.mistakes.length === 0 ? (
-          <p className="text-sm text-[var(--color-muted)]">{t("mojimori.study.none")}</p>
-        ) : (
-          <ul className="space-y-1 text-sm">
-            {study.mistakes.map((item) => (
-              <li key={item.subjectId} className="flex justify-between">
-                <Link
-                  href={mojiMoriSubjectHref({
-                    id: item.subjectId,
-                    objectType: item.objectType,
-                    characters: item.characters,
-                  })}
-                >
-                  {item.characters ?? item.subjectId}
-                </Link>
-                <span>{item.count}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      <ForecastPanel forecast={study.forecast} />
 
       <section className="glass-panel p-5">
         <h2 className="mb-3 text-base font-semibold">{t("mojimori.study.extraTitle")}</h2>
@@ -91,6 +49,16 @@ export function MojiMoriStudyWidgets({ study }: { study: MojiMoriStudySnapshot }
             {t("mojimori.study.cookedItems", { count: study.extra.cooked })}
           </Link>
         </div>
+        {study.mistakes.length > 0 ? (
+          <div className="mt-4">
+            <h3 className="mb-2 text-sm font-medium">{t("mojimori.study.mistakes")}</h3>
+            <div className="mistake-row">
+              {study.mistakes.map((item) => (
+                <LevelSubjectCard key={item.subjectId} subject={mistakeCard(item)} caption={false} />
+              ))}
+            </div>
+          </div>
+        ) : null}
       </section>
 
       <section className="grid gap-3 sm:grid-cols-2">
@@ -139,6 +107,168 @@ export function MojiMoriStudyWidgets({ study }: { study: MojiMoriStudySnapshot }
         </p>
       </section>
     </div>
+  );
+}
+
+function localeTag(locale: string) {
+  return locale === "tr" ? "tr-TR" : "en-US";
+}
+
+function dayLabel(date: string, locale: string) {
+  const [year, month, day] = date.split("-").map(Number);
+  return new Date(year, (month ?? 1) - 1, day ?? 1).toLocaleDateString(localeTag(locale), {
+    weekday: "short",
+  });
+}
+
+function hourLabel(iso: string, locale: string) {
+  return new Date(iso).toLocaleTimeString(localeTag(locale), { hour: "numeric" });
+}
+
+function mistakeCard(item: MojiMoriStudySnapshot["mistakes"][number]): MojiMoriSubjectSummary {
+  const stage = item.srsStage;
+  return {
+    id: item.subjectId,
+    objectType: item.objectType,
+    level: item.level,
+    slug: item.slug,
+    characters: item.characters,
+    primaryMeaning: item.primaryMeaning,
+    primaryReading: item.primaryReading,
+    characterImages: item.characterImages,
+    lessonPosition: item.lessonPosition,
+    progress: {
+      status: stage >= 13 ? "burned" : stage >= 5 ? "guru" : stage > 0 ? "review" : "locked",
+      srsStage: stage,
+      passed: stage >= 5,
+    },
+  };
+}
+
+function ForecastPanel({ forecast }: { forecast: MojiMoriStudySnapshot["forecast"] }) {
+  const { t, locale } = useTranslation();
+  const [dayKey, setDayKey] = useState<string | null>(null);
+  const [phase, setPhase] = useState<"closed" | "open" | "closing">("closed");
+
+  let running = 0;
+  const days = (forecast.days ?? []).map((day) => {
+    running += day.count;
+    return { ...day, hours: day.hours ?? [], cumulative: running };
+  });
+  const peak = Math.max(1, ...days.map((day) => day.count));
+  const selected = days.find((day) => day.date === dayKey) ?? null;
+
+  useEffect(() => {
+    if (!dayKey || phase !== "closed") return;
+    let second = 0;
+    const first = requestAnimationFrame(() => {
+      second = requestAnimationFrame(() => setPhase("open"));
+    });
+    return () => {
+      cancelAnimationFrame(first);
+      if (second) cancelAnimationFrame(second);
+    };
+  }, [dayKey, phase]);
+
+  useEffect(() => {
+    if (phase !== "closing") return;
+    const timer = window.setTimeout(() => {
+      setDayKey(null);
+      setPhase("closed");
+    }, 440);
+    return () => window.clearTimeout(timer);
+  }, [phase]);
+
+  function openDay(date: string) {
+    if (dayKey === date && phase === "open") {
+      setPhase("closing");
+      return;
+    }
+    setDayKey(date);
+    if (phase !== "closed") setPhase("open");
+  }
+
+  function closeDay() {
+    if (!dayKey || phase === "closing") return;
+    setPhase("closing");
+  }
+
+  let hourRunning = selected ? selected.cumulative - selected.count : 0;
+  const hours =
+    selected?.hours
+      .filter((hour) => hour.count > 0)
+      .map((hour) => {
+        hourRunning += hour.count;
+        return { ...hour, cumulative: hourRunning };
+      }) ?? [];
+  const hourPeak = Math.max(1, ...hours.map((hour) => hour.count));
+
+  return (
+    <section className="glass-panel level-progress">
+      <div className="forecast-head px-5 pt-5 pb-4">
+        <p className="forecast-next">{t("mojimori.study.forecastNext")}</p>
+        <p className="forecast-items">
+          {t("mojimori.study.forecastItems", { count: forecast.next24 ?? 0 })}
+        </p>
+      </div>
+      <div className="px-4 py-2">
+        {days.map((day) => (
+          <button
+            key={day.date}
+            type="button"
+            className="forecast-row"
+            onClick={() => openDay(day.date)}
+          >
+            <span className="forecast-day">{dayLabel(day.date, locale)}</span>
+            <span className="forecast-track">
+              <span
+                className={`forecast-bar${day.count === 0 ? " is-empty" : ""}`}
+                style={
+                  day.count === 0
+                    ? undefined
+                    : { width: `${Math.max(6, (day.count / peak) * 100)}%` }
+                }
+              />
+            </span>
+            <span className="forecast-plus">(+{day.count})</span>
+            <span className="forecast-sum">{day.cumulative}</span>
+            <ChevronRight size={16} className="forecast-chevron" />
+          </button>
+        ))}
+      </div>
+      {selected ? (
+        <div className={`level-sheet p-5 ${phase === "open" ? "is-open" : ""}`}>
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <button type="button" onClick={closeDay} className="moji-btn">
+              <ChevronLeft size={14} />
+              {dayLabel(selected.date, locale)}
+            </button>
+            <span className="font-semibold">
+              <span className="forecast-plus">(+{selected.count})</span> {selected.cumulative}
+            </span>
+          </div>
+          <div className="min-h-0 flex-1 overflow-auto">
+            {hours.length === 0 ? (
+              <p className="text-sm text-[var(--color-muted)]">{t("mojimori.study.none")}</p>
+            ) : (
+              hours.map((hour) => (
+                <div key={hour.at} className="forecast-row">
+                  <span className="forecast-day">{hourLabel(hour.at, locale)}</span>
+                  <span className="forecast-track">
+                    <span
+                      className="forecast-bar"
+                      style={{ width: `${Math.max(6, (hour.count / hourPeak) * 100)}%` }}
+                    />
+                  </span>
+                  <span className="forecast-plus">(+{hour.count})</span>
+                  <span className="forecast-sum">{hour.cumulative}</span>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      ) : null}
+    </section>
   );
 }
 

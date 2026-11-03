@@ -118,8 +118,10 @@ export function SubjectTile({
 
 export function LevelSubjectCard({
   subject,
+  caption = true,
 }: {
   subject: MojiMoriSubjectSummary;
+  caption?: boolean;
 }) {
   const [, navigate] = useLocation();
   return (
@@ -129,9 +131,11 @@ export function LevelSubjectCard({
       className="level-subject-card flex w-max max-w-full flex-col items-center px-2 py-3 text-center"
     >
       <ProgressSquare subject={subject} size="sm" />
-      <span className="mt-2 flex flex-col items-center gap-0.5">
-        <TileCaption subject={subject} />
-      </span>
+      {caption ? (
+        <span className="mt-2 flex flex-col items-center gap-0.5">
+          <TileCaption subject={subject} />
+        </span>
+      ) : null}
     </button>
   );
 }
