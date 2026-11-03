@@ -22,6 +22,7 @@ import { MojiMoriLoading } from "./MojiMoriLoading";
 import {
   useCheckMojiMori,
   useGradeMojiMori,
+  useMojiMoriExtra,
   useMojiMoriNotes,
   useMojiMoriReviews,
   useMojiMoriStudySettings,
@@ -172,9 +173,17 @@ function Glyph({ card }: { card: MojiMoriStudyCard }) {
   return <span>?</span>;
 }
 
-export function MojiMoriReviewSession() {
+export function MojiMoriReviewSession({
+  source = "review",
+  extraMode = "recent-lessons",
+}: {
+  source?: "review" | "extra";
+  extraMode?: string;
+} = {}) {
   const { t } = useTranslation();
-  const reviews = useMojiMoriReviews();
+  const reviews = useMojiMoriReviews(source === "review");
+  const extra = useMojiMoriExtra(extraMode, source === "extra");
+  const feed = source === "extra" ? extra : reviews;
   const check = useCheckMojiMori();
   const grade = useGradeMojiMori();
   const [cards, setCards] = useState<MojiMoriStudyCard[] | null>(null);
@@ -207,14 +216,21 @@ export function MojiMoriReviewSession() {
   const ready = cards != null;
 
   useEffect(() => {
-    if (ready || !reviews.data) return;
-    const items = reviews.data.items;
-    const tasks = items.flatMap((item) =>
-      item.prompts.map((prompt) => ({ subjectId: item.id, prompt, retry: false })),
-    );
-    setCards(items);
-    setQueue(shuffle(tasks));
-  }, [ready, reviews.data]);
+    if (ready) return;
+    if (feed.data) {
+      const items = feed.data.items;
+      const tasks = items.flatMap((item) =>
+        item.prompts.map((prompt) => ({ subjectId: item.id, prompt, retry: false })),
+      );
+      setCards(items);
+      setQueue(shuffle(tasks));
+      return;
+    }
+    if (!feed.isLoading && !feed.isFetching) {
+      setCards([]);
+      setQueue([]);
+    }
+  }, [ready, feed.data, feed.isLoading, feed.isFetching]);
 
   const byId = useMemo(() => new Map((cards ?? []).map((card) => [card.id, card])), [cards]);
   const current = queue[0];
@@ -304,9 +320,10 @@ export function MojiMoriReviewSession() {
   }
 
   useEffect(() => {
-    if (!prefs.data?.reviewsAutoplay || !card || card.objectType !== "vocabulary") return;
+    const autoplay = source === "extra" ? prefs.data?.extraStudyAutoplay : prefs.data?.reviewsAutoplay;
+    if (!autoplay || !card || card.objectType !== "vocabulary") return;
     if (!current || current.prompt !== "reading") return;
-    const mark = `${card.id}:review`;
+    const mark = `${card.id}:${source}`;
     if (heard.current === mark) return;
     const track = pickVoice(tracks, prefs.data.preferredVoice);
     if (!track || !audioRef.current) return;
@@ -314,7 +331,7 @@ export function MojiMoriReviewSession() {
     audioRef.current.src = track.url;
     void audioRef.current.play();
     setPlaying(track.url);
-  }, [prefs.data, card, current, tracks]);
+  }, [prefs.data, card, current, tracks, source]);
 
   function toggleInfo() {
     if (!card || !current) return;
@@ -379,12 +396,13 @@ export function MojiMoriReviewSession() {
       const next: ItemRecord = { ...prev };
       if (first) next[current.prompt] = { answer: submitted, correct: checked.correct };
       if (first && card.prompts.every((prompt) => next[prompt]) && !next.grade) {
-        next.grade = await grade.mutateAsync({
-          kind: "review",
+        const result = await grade.mutateAsync({
+          kind: source === "extra" ? "extra" : "review",
           subjectId: card.id,
           meaning: next.meaning?.answer,
           reading: next.reading?.answer,
         });
+        if (source !== "extra") next.grade = result;
       }
       recordsRef.current = { ...recordsRef.current, [card.id]: next };
       setRecords(recordsRef.current);
@@ -452,8 +470,8 @@ export function MojiMoriReviewSession() {
     return () => window.removeEventListener("keydown", onKey);
   });
 
-  if (cards == null && reviews.data) {
-    const items = reviews.data.items;
+  if (cards == null && feed.data) {
+    const items = feed.data.items;
     const tasks = items.flatMap((item) =>
       item.prompts.map((prompt) => ({ subjectId: item.id, prompt, retry: false })),
     );
@@ -462,11 +480,15 @@ export function MojiMoriReviewSession() {
   }
 
   const page = (() => {
-    if (reviews.isLoading || !ready) return <MojiMoriLoading />;
+    if (feed.isLoading || !ready) return <MojiMoriLoading />;
     if (!card || !current) {
       return (
         <section className="glass-panel mm-quiz__done">
-          <h1>{total === 0 ? t("mojimori.study.empty") : t("mojimori.study.reviewsDone")}</h1>
+          <h1>
+            {total === 0
+              ? t("mojimori.study.empty")
+              : t(source === "extra" ? "mojimori.study.extraDone" : "mojimori.study.reviewsDone")}
+          </h1>
           <Link href="/mojimori" className="moji-btn-primary">
             {t("mojimori.study.returnHome")}
           </Link>
@@ -660,8 +682,8 @@ export function MojiMoriReviewSession() {
   return (
     <MojiMoriLayout showHeader={false}>
       <div className="mm-quiz-page">
-        {reviews.isError ? (
-          <section className="glass-panel p-6 text-sm">{reviews.error.message}</section>
+        {feed.isError ? (
+          <section className="glass-panel p-6 text-sm">{feed.error.message}</section>
         ) : (
           page
         )}

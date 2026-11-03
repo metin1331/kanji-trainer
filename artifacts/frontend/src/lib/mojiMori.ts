@@ -209,6 +209,7 @@ export type MojiMoriStudySnapshot = {
   extra: { recentLessons: number; recentMistakes: number; cooked: number };
   completed: { key: string; current: number | null; previous: number | null }[];
   accuracy: { key: string; current: number | null; previous: number | null }[];
+  reviewDays?: { date: string; count: number; correct: number }[];
   heatmap: { date: string; count: number }[];
   lists: {
     cooked: { id: number; characters: string | null; objectType: string }[];

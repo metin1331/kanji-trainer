@@ -215,8 +215,11 @@ export function mojiMoriReviewsQuery() {
   };
 }
 
-export function useMojiMoriReviews() {
-  return useQuery(mojiMoriReviewsQuery());
+export function useMojiMoriReviews(enabled = true) {
+  return useQuery({
+    ...mojiMoriReviewsQuery(),
+    enabled,
+  });
 }
 
 export function mojiMoriExtraQuery(mode: string) {
@@ -229,10 +232,12 @@ export function mojiMoriExtraQuery(mode: string) {
   };
 }
 
-export function useMojiMoriExtra(mode: string) {
+export function useMojiMoriExtra(mode: string, enabled = true) {
   return useQuery({
     ...mojiMoriExtraQuery(mode),
-    enabled: mode === "recent-lessons" || mode === "recent-mistakes" || mode === "cooked",
+    enabled:
+      enabled &&
+      (mode === "recent-lessons" || mode === "recent-mistakes" || mode === "cooked"),
   });
 }
 

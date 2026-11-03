@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { motion, useReducedMotion } from "motion/react";
 import {
   installMojiMoriNavigation,
+  markRouteProgressFull,
   progressSnapshot,
   subscribeProgress,
 } from "./navigationProgress";
@@ -38,6 +39,9 @@ export function MojiRouteBar() {
             ? { duration: 0 }
             : { type: "spring", stiffness: 220, damping: 32, mass: 0.7 }
         }
+        onAnimationComplete={() => {
+          if (snap.value >= 100) markRouteProgressFull();
+        }}
       />
     </div>
   );

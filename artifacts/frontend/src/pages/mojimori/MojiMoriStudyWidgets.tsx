@@ -1,6 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Link } from "wouter";
+import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import { useTranslation } from "../../i18n/I18nProvider";
 import type { MojiMoriStudySnapshot, MojiMoriSubjectSummary } from "../../lib/mojiMori";
 import { TodaysLessonsWidget } from "./TodaysLessonsWidget";
@@ -61,10 +63,7 @@ export function MojiMoriStudyWidgets({ study }: { study: MojiMoriStudySnapshot }
         ) : null}
       </section>
 
-      <section className="grid gap-3 sm:grid-cols-2">
-        <StatList title={t("mojimori.study.completed")} rows={study.completed} suffix="" />
-        <StatList title={t("mojimori.study.accuracy")} rows={study.accuracy} suffix="%" />
-      </section>
+      <ReviewStats study={study} />
 
       <section className="glass-panel p-5">
         <h2 className="mb-3 text-lg sm:text-base font-semibold">{t("mojimori.study.heatmap")}</h2>
@@ -272,31 +271,210 @@ function ForecastPanel({ forecast }: { forecast: MojiMoriStudySnapshot["forecast
   );
 }
 
-function StatList({
-  title,
-  rows,
-  suffix,
-}: {
-  title: string;
-  rows: { key: string; current: number | null; previous: number | null }[];
-  suffix: string;
-}) {
-  const { t } = useTranslation();
+function statOf(
+  rows: { key: string; current: number | null; previous: number | null }[],
+  key: string,
+) {
+  return rows.find((row) => row.key === key) ?? { key, current: null, previous: null };
+}
+
+function percentText(value: number | null) {
+  if (value == null) return "–";
+  return `${value.toFixed(2)}%`;
+}
+
+type ChartRange = "7d" | "month" | "year";
+type ChartMetric = "count" | "percent";
+
+function parseDay(date: string) {
+  const [year, month, day] = date.split("-").map(Number);
+  return new Date(year ?? 1970, (month ?? 1) - 1, day ?? 1);
+}
+
+function dayKey(date: Date) {
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
+function chartRows(
+  days: { date: string; count: number; correct: number }[],
+  range: ChartRange,
+  locale: string,
+  metric: ChartMetric,
+) {
+  const tag = localeTag(locale);
+  const byDate = new Map(days.map((day) => [day.date, day]));
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const length = range === "7d" ? 7 : 30;
+  const points =
+    range === "year"
+      ? Array.from({ length: 12 }, (_, month) => {
+          const matched = days.filter((day) => {
+            const date = parseDay(day.date);
+            return date.getFullYear() === today.getFullYear() && date.getMonth() === month;
+          });
+          const count = matched.reduce((sum, day) => sum + day.count, 0);
+          const correct = matched.reduce((sum, day) => sum + day.correct, 0);
+          return {
+            label: new Date(today.getFullYear(), month, 1).toLocaleDateString(tag, { month: "short" }),
+            count,
+            correct,
+          };
+        })
+      : Array.from({ length }, (_, index) => {
+          const date = new Date(today);
+          date.setDate(today.getDate() - (length - 1 - index));
+          const row = byDate.get(dayKey(date));
+          return {
+            label:
+              range === "7d"
+                ? date.toLocaleDateString(tag, { weekday: "short" })
+                : String(date.getDate()),
+            count: row?.count ?? 0,
+            correct: row?.correct ?? 0,
+          };
+        });
+  return points.map((point) => ({
+    label: point.label,
+    value:
+      metric === "count"
+        ? point.count
+        : point.count === 0
+          ? 0
+          : Math.round((point.correct / point.count) * 1000) / 10,
+  }));
+}
+
+function ReviewStats({ study }: { study: MojiMoriStudySnapshot }) {
+  const { t, locale } = useTranslation();
+  const [metric, setMetric] = useState<ChartMetric | null>(null);
+  const [phase, setPhase] = useState<"closed" | "open" | "closing">("closed");
+  const [range, setRange] = useState<ChartRange>("7d");
+  const week = statOf(study.accuracy, "7d");
+  const today = statOf(study.completed, "today");
+  const rows = useMemo(
+    () => chartRows(study.reviewDays ?? [], range, locale, metric ?? "count"),
+    [study.reviewDays, range, locale, metric],
+  );
+  const chartConfig = {
+    value: {
+      label: t(metric === "percent" ? "mojimori.study.accuracy" : "mojimori.study.completed"),
+      color: "var(--color-azure)",
+    },
+  } satisfies ChartConfig;
+
+  useEffect(() => {
+    if (!metric || phase !== "closed") return;
+    let second = 0;
+    const first = requestAnimationFrame(() => {
+      second = requestAnimationFrame(() => setPhase("open"));
+    });
+    return () => {
+      cancelAnimationFrame(first);
+      if (second) cancelAnimationFrame(second);
+    };
+  }, [metric, phase]);
+
+  useEffect(() => {
+    if (phase !== "closing") return;
+    const timer = window.setTimeout(() => {
+      setMetric(null);
+      setPhase("closed");
+    }, 440);
+    return () => window.clearTimeout(timer);
+  }, [phase]);
+
+  function open(next: ChartMetric) {
+    setRange("7d");
+    if (metric === next && phase === "open") {
+      setPhase("closing");
+      return;
+    }
+    setMetric(next);
+    if (phase !== "closed") setPhase("open");
+  }
+
+  function close() {
+    if (!metric || phase === "closing") return;
+    setPhase("closing");
+  }
+
   return (
-    <section className="glass-panel p-5">
-      <h2 className="mb-2 text-lg sm:text-base font-semibold">{title}</h2>
-      <ul className="space-y-1 text-sm">
-        {rows.map((row) => (
-          <li key={row.key} className="flex justify-between gap-3">
-            <span>{t(`mojimori.study.period.${row.key}`)}</span>
-            <span>
-              {row.current ?? "–"}
-              {row.current != null ? suffix : ""}
-              {row.previous != null ? ` (${row.previous}${suffix})` : ""}
-            </span>
-          </li>
-        ))}
-      </ul>
+    <section className="glass-panel level-progress review-stats">
+      <div className="review-stats__grid">
+        <article className="review-stat">
+          <h2>{t("mojimori.study.accuracy")}</h2>
+          <p className="review-stat__value">{percentText(week.current)}</p>
+          <p className="review-stat__label">{t("mojimori.study.past7Days")}</p>
+          <p className="review-stat__compare">{t("mojimori.study.previousPeriod")}</p>
+          <p className="review-stat__previous">{percentText(week.previous)}</p>
+          <button type="button" className="moji-btn" onClick={() => open("percent")}>
+            {t("mojimori.study.details")}
+          </button>
+        </article>
+        <article className="review-stat">
+          <h2>{t("mojimori.study.completed")}</h2>
+          <p className="review-stat__value">{today.current ?? "–"}</p>
+          <p className="review-stat__label">{t("mojimori.study.period.today")}</p>
+          <p className="review-stat__compare">{t("mojimori.study.yesterday")}</p>
+          <p className="review-stat__previous">
+            {t("mojimori.study.reviewsCount", { count: today.previous ?? 0 })}
+          </p>
+          <button type="button" className="moji-btn" onClick={() => open("count")}>
+            {t("mojimori.study.details")}
+          </button>
+        </article>
+      </div>
+      {metric ? (
+        <div className={`level-sheet p-5 ${phase === "open" ? "is-open" : ""}`}>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <button type="button" onClick={close} className="moji-btn">
+              <ChevronLeft size={14} />
+              {t("mojimori.back")}
+            </button>
+            <div className="review-range">
+              {(["7d", "month", "year"] as const).map((key) => (
+                <button
+                  key={key}
+                  type="button"
+                  className={`moji-btn${range === key ? " is-on" : ""}`}
+                  aria-pressed={range === key}
+                  onClick={() => setRange(key)}
+                >
+                  {t(`mojimori.study.period.${key}`)}
+                </button>
+              ))}
+            </div>
+          </div>
+          <ChartContainer config={chartConfig} className="review-chart aspect-auto">
+            <BarChart data={rows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid vertical={false} />
+              <XAxis dataKey="label" tickLine={false} axisLine={false} interval={range === "month" ? 4 : 0} />
+              <YAxis
+                tickLine={false}
+                axisLine={false}
+                width={36}
+                domain={metric === "percent" ? [0, 100] : [0, "auto"]}
+                allowDecimals={metric === "percent"}
+              />
+              <ChartTooltip
+                content={
+                  <ChartTooltipContent
+                    formatter={(value) => (
+                      <span className="font-medium">
+                        {metric === "percent" ? `${value}%` : value}
+                      </span>
+                    )}
+                  />
+                }
+              />
+              <Bar dataKey="value" fill="var(--color-value)" radius={[3, 3, 0, 0]} />
+            </BarChart>
+          </ChartContainer>
+        </div>
+      ) : null}
     </section>
   );
 }

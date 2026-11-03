@@ -300,7 +300,7 @@ function MojiMobileNav({
     const timer = window.setTimeout(() => {
       setMenuOn(false);
       setMenuPhase("closed");
-    }, 0);
+    }, 100);
     return () => window.clearTimeout(timer);
   }, [menuPhase]);
 

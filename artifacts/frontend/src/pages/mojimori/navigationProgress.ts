@@ -55,6 +55,47 @@ export function startRouteProgress() {
   }
 }
 
+let fullWaiter: (() => void) | null = null;
+let finishGeneration = 0;
+
+export function markRouteProgressFull() {
+  fullWaiter?.();
+}
+
+function finishRouteProgress() {
+  depth = Math.max(0, depth - 1);
+  if (depth > 0) return Promise.resolve();
+  if (creep != null) {
+    window.clearInterval(creep);
+    creep = null;
+  }
+  if (hide != null) {
+    window.clearTimeout(hide);
+    hide = null;
+  }
+  const generation = ++finishGeneration;
+  publish({ visible: true, value: 100 });
+  return new Promise<void>((resolve) => {
+    let settled = false;
+    let hold: number | null = null;
+    let fallback: number | null = null;
+    const finish = () => {
+      if (settled || generation !== finishGeneration) return;
+      settled = true;
+      if (hold != null) window.clearTimeout(hold);
+      if (fallback != null) window.clearTimeout(fallback);
+      if (fullWaiter === arrive) fullWaiter = null;
+      resolve();
+    };
+    const arrive = () => {
+      if (generation !== finishGeneration || hold != null) return;
+      hold = window.setTimeout(finish, 280);
+    };
+    fullWaiter = arrive;
+    fallback = window.setTimeout(finish, 900);
+  });
+}
+
 export function stopRouteProgress() {
   depth = Math.max(0, depth - 1);
   if (depth > 0) return;
@@ -287,17 +328,16 @@ export function installMojiMoriNavigation(client: QueryClient) {
       warm(dest, client)
         .catch(() => undefined)
         .finally(() => {
-          if (token !== latest) {
-            stopRouteProgress();
-            return;
-          }
-          applying = true;
-          try {
-            write(data, unused, url);
-          } finally {
-            applying = false;
-          }
-          stopRouteProgress();
+          void finishRouteProgress().then(() => {
+            if (token !== latest) return;
+            applying = true;
+            try {
+              write(data, unused, url);
+            } finally {
+              applying = false;
+            }
+            publish({ visible: false, value: 0 });
+          });
         });
     }) as History["pushState"];
   }

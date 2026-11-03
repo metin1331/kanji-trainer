@@ -8,7 +8,10 @@ export function TodaysLessonsWidget({
   lessons: MojiMoriStudySnapshot["lessons"];
 }) {
   const { t } = useTranslation();
-  const today = lessons.dailyRemaining ?? lessons.available;
+  const today =
+    lessons.dailyRemaining == null
+      ? lessons.available
+      : Math.min(lessons.available, lessons.dailyRemaining);
   const canStart = today > 0;
   const canPick = lessons.available > 0;
 

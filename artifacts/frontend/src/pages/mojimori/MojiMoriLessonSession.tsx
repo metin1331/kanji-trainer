@@ -103,8 +103,10 @@ export function MojiMoriLessonSession({ ids }: { ids?: number[] }) {
   const heard = useRef("");
 
   useEffect(() => {
-    if (order == null && lessons.data) setOrder(lessons.data.items);
-  }, [order, lessons.data]);
+    if (order != null || !lessons.data) return;
+    if (lessons.data.items.length === 0 && lessons.isFetching) return;
+    setOrder(lessons.data.items);
+  }, [order, lessons.data, lessons.isFetching]);
 
   const card = order?.[index] ?? null;
   const task = phase === "quiz" ? tasks[0] ?? null : null;
@@ -358,11 +360,11 @@ export function MojiMoriLessonSession({ ids }: { ids?: number[] }) {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  if (order == null && lessons.data) {
+  if (order == null && lessons.data && (lessons.data.items.length > 0 || !lessons.isFetching)) {
     setOrder(lessons.data.items);
   }
 
-  if (lessons.isLoading || order == null) {
+  if (order == null) {
     return <MojiMoriLoading />;
   }
   if (order.length === 0) {

@@ -490,6 +490,7 @@ export async function extraQueue(userId: number, mode: ExtraMode) {
       level: mojiMoriSubjectsTable.level,
       characters: mojiMoriSubjectsTable.characters,
       characterImages: mojiMoriSubjectsTable.characterImages,
+      pronunciationAudios: mojiMoriSubjectsTable.pronunciationAudios,
       srsStage: mojiMoriProgressTable.srsStage,
     })
     .from(mojiMoriProgressTable)
@@ -767,6 +768,7 @@ export async function studySnapshot(userId: number) {
     },
     completed: periodStats(logs, now, false),
     accuracy: periodStats(logs, now, true),
+    reviewDays: reviewDays(logs, now),
     heatmap: heatmapFrom(logs, now),
     lists: await itemLists(userId, logs),
     streak: streakFrom(logs, now),
@@ -916,6 +918,29 @@ function measure(logs: LogRow[], start: Date | null, end: Date | null, accuracy:
   if (!accuracy) return rows.length;
   if (rows.length === 0) return null;
   return Math.round((rows.filter((row) => row.correct).length / rows.length) * 1000) / 10;
+}
+
+function reviewDays(logs: LogRow[], now: Date) {
+  const today = startOfDay(now);
+  const yearStart = new Date(now.getFullYear(), 0, 1);
+  const monthAgo = addDays(today, -29);
+  const start = monthAgo < yearStart ? monthAgo : yearStart;
+  const totals = new Map<string, { count: number; correct: number }>();
+  for (const row of logs) {
+    if (row.kind !== "review" || row.createdAt < start || row.createdAt > now) continue;
+    const key = dateKey(row.createdAt);
+    const bucket = totals.get(key) ?? { count: 0, correct: 0 };
+    bucket.count += 1;
+    if (row.correct) bucket.correct += 1;
+    totals.set(key, bucket);
+  }
+  const days: { date: string; count: number; correct: number }[] = [];
+  for (let cursor = new Date(start); cursor <= today; cursor = addDays(cursor, 1)) {
+    const key = dateKey(cursor);
+    const bucket = totals.get(key) ?? { count: 0, correct: 0 };
+    days.push({ date: key, count: bucket.count, correct: bucket.correct });
+  }
+  return days;
 }
 
 function heatmapFrom(logs: LogRow[], now: Date) {

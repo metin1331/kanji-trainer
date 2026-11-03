@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, CircleDot, Crown, Egg, Flame, Gem, Hexagon, Shield, Sparkles, Star } from "lucide-react";
 import { MojiMoriLoading } from "./MojiMoriLoading";
 import { useTranslation } from "../../i18n/I18nProvider";
 import {
@@ -12,32 +12,71 @@ import {
   MOJI_MORI_LEVEL_BANDS,
   MOJI_MORI_TYPE_COLORS,
   SRS_GROUPS,
+  type MojiMoriDashboard,
   type MojiMoriLevelProgress,
   type MojiMoriObjectType,
-  type MojiMoriTypeCounts,
 } from "../../lib/mojiMori";
 import { MojiMoriLayout } from "./MojiMoriLayout";
 import { SeeAllGrid } from "./SubjectTile";
 import { MojiMoriStudyWidgets } from "./MojiMoriStudyWidgets";
 
-function TypePills({ counts }: { counts: MojiMoriTypeCounts }) {
-  const items = [
-    ["radical", counts.radical],
-    ["kanji", counts.kanji],
-    ["vocabulary", counts.vocabulary],
-  ] as const;
+const SPREAD_ICONS = {
+  novice: Egg,
+  apprentice: CircleDot,
+  proficient: Hexagon,
+  adept: Sparkles,
+  veteran: Shield,
+  expert: Star,
+  master: Crown,
+  grandmaster: Gem,
+  legendary: Flame,
+} as const;
+
+function ItemSpread({ spread }: { spread: MojiMoriDashboard["spread"] }) {
+  const { t } = useTranslation();
+  const types = ["radical", "kanji", "vocabulary"] as const;
   return (
-    <span className="mt-2 flex gap-1">
-      {items.map(([type, count]) => (
-        <span
-          key={type}
-          className="min-w-7 rounded px-1.5 py-0.5 text-center text-xs font-semibold text-[var(--color-ink)]"
-          style={{ background: MOJI_MORI_TYPE_COLORS[type] }}
-        >
-          {count}
-        </span>
-      ))}
-    </span>
+    <section className="glass-panel item-spread">
+      <div className="item-spread__head">
+        <h2 className="text-lg sm:text-base font-semibold tracking-tight">
+          {t("mojimori.itemSpread")}
+        </h2>
+        <div className="item-spread__legend">
+          {types.map((type) => (
+            <span key={type}>
+              <i style={{ background: `var(--color-${type})` }} />
+              {t(`mojimori.types.${type}`)}
+            </span>
+          ))}
+        </div>
+      </div>
+      <div className="item-spread__rows">
+        {SRS_GROUPS.map((group) => {
+          const Icon = SPREAD_ICONS[group];
+          const row = spread[group];
+          return (
+            <div key={group} className="item-spread__row">
+              <span className="item-spread__name">
+                <Icon size={15} />
+                <span>{t(`mojimori.srs.${group}`)}</span>
+              </span>
+              <span className="item-spread__counts">
+                {types.map((type) => (
+                  <span
+                    key={type}
+                    className="item-spread__pill"
+                    style={{ background: `var(--color-${type})` }}
+                  >
+                    {row[type]}
+                  </span>
+                ))}
+              </span>
+              <span className="item-spread__total">{row.total}</span>
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
@@ -194,41 +233,7 @@ export function MojiMoriDashboardPage() {
       ) : (
         <div className="space-y-5">
           {data.study ? <MojiMoriStudyWidgets study={data.study} /> : null}
-          <section className="glass-panel p-5">
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-lg sm:text-base font-semibold tracking-tight">
-                {t("mojimori.itemSpread")}
-              </h2>
-              <span className="flex gap-3 text-xs font-bold">
-                <span style={{ color: MOJI_MORI_TYPE_COLORS.radical }}>
-                  {t("mojimori.types.radical")}
-                </span>
-                <span style={{ color: MOJI_MORI_TYPE_COLORS.kanji }}>
-                  {t("mojimori.types.kanji")}
-                </span>
-                <span style={{ color: MOJI_MORI_TYPE_COLORS.vocabulary }}>
-                  {t("mojimori.types.vocabulary")}
-                </span>
-              </span>
-            </div>
-            <div className="grid gap-2 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
-              {SRS_GROUPS.map((group) => (
-                <div
-                  key={group}
-                  className="rounded-lg border border-[var(--color-line)] bg-white/70 px-3 py-2"
-                >
-                  <div className="text-sm font-medium text-[var(--color-muted)]">
-                    {t(`mojimori.srs.${group}`)}
-                  </div>
-                  <div className="text-right text-sm font-semibold">
-                    {data.spread[group].total}
-                  </div>
-                  <TypePills counts={data.spread[group]} />
-                </div>
-              ))}
-            </div>
-          </section>
-
+          <div className="dash-split">
           <section className="glass-panel level-progress">
             <div className="p-5">
             <div className="mb-3 flex items-center justify-between gap-3">
@@ -355,6 +360,8 @@ export function MojiMoriDashboardPage() {
               </div>
             ) : null}
           </section>
+          <ItemSpread spread={data.spread} />
+          </div>
         </div>
       )}
     </MojiMoriLayout>
