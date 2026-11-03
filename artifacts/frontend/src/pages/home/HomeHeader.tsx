@@ -62,7 +62,7 @@ export function HomeHeader({
         <div className="-mt-1 -mr-2 flex items-center gap-4">
           <button
             onClick={() => navigate("/mojimori")}
-            className="box-border inline-flex h-9 items-center justify-center rounded-xl px-2 text-sm font-semibold transition-transform hover:scale-105"
+            className="box-border inline-flex h-7 items-center justify-center rounded-md px-2 text-sm font-semibold transition-transform hover:scale-105"
             style={{
               border: "3px solid transparent",
               background:
@@ -79,6 +79,7 @@ export function HomeHeader({
                 color: "transparent",
                 WebkitTextFillColor: "transparent",
                 display: "inline-block",
+                marginBottom: "1px",
               }}
             >
               MojiMori
