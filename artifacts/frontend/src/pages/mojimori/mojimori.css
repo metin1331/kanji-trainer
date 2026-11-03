@@ -8,7 +8,7 @@
   --color-ink: #1e293b;
   --color-muted: #64748b;
   --color-radical: oklab(81.473% -0.129 0.00806);
-  --color-kanji: #a78bfa;
+  --color-kanji: oklab(70.897% 0.0636 -0.14602);
   --color-vocabulary: oklab(87.685% 0.01595 0.16358);
   --color-radical-dark: color-mix(in srgb, var(--color-radical) 84%, black);
   --color-radical-soft: color-mix(in srgb, var(--color-radical) 18%, white);

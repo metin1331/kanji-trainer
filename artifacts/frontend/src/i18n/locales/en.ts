@@ -411,6 +411,7 @@ export const en = {
   a11y: {
     srs: "SRS",
     mojimori: "MojiMori",
+    menu: "Menu",
     settings: "Settings",
     progress: "Progress",
     changeLevel: "Change level",

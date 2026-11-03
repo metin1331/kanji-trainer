@@ -413,6 +413,7 @@ export const tr: Messages = {
   a11y: {
     srs: "SRS",
     mojimori: "MojiMori",
+    menu: "Menü",
     settings: "Ayarlar",
     progress: "İlerleme",
     changeLevel: "Seviyeyi değiştir",

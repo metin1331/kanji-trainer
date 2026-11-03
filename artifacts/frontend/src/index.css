@@ -151,7 +151,7 @@ html.theme-switching *::after {
 
   --app-bg: #f5f7fa;
   --app-heatmap-alternative: #f5f7fa;
-  --app-surface: rgba(255, 255, 255, 0.7);
+  --app-surface: rgba(255, 255, 255);
   --app-muted: rgba(245, 247, 250, 0.9);
   --app-heatmap: #f3f4f6;
   --app-muted-alternative: #eef2f7;
