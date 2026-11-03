@@ -1,0 +1,87 @@
+{
+  "id": 2541,
+  "object": "vocabulary",
+  "url": "https://api.wanikani.com/v2/subjects/2541",
+  "data_updated_at": "2026-10-02T00:07:31.186411Z",
+  "data": {
+    "created_at": "2012-02-29T07:43:02.000000Z",
+    "level": 2,
+    "slug": "日",
+    "hidden_at": null,
+    "document_url": "https://www.wanikani.com/vocabulary/%E6%97%A5",
+    "characters": "日",
+    "meanings": [
+      { "meaning": "Sun", "primary": true, "accepted_answer": true },
+      { "meaning": "Day", "primary": false, "accepted_answer": true }
+    ],
+    "auxiliary_meanings": [],
+    "readings": [{ "reading": "ひ", "primary": true, "accepted_answer": true }],
+    "parts_of_speech": ["noun"],
+    "component_subject_ids": [476],
+    "meaning_mnemonic": "The kanji and the word are exactly the same. That means they share meanings as well. Take note that this word means both \"sun\" and \"day,\" though. Why? because the sun takes a day to go around and come back!",
+    "reading_mnemonic": "Since this word is made up of a single kanji, it uses the kun'yomi reading. Here's a mnemonic to help you to remember it: \n\nWhat do you feel from the sun? You feel the \u003creading\u003ehea\u003c/reading\u003et (ひ).",
+    "context_sentences": [
+      { "en": "The sun will come out soon.", "ja": "そろそろ日が出ますよ。" },
+      {
+        "en": "The date the puppy comes is the 3rd.",
+        "ja": "子犬がくる日は三日です。"
+      },
+      {
+        "en": "I lost my passport on the day I came to Japan.",
+        "ja": "日本にきた日にパスポートをなくした。"
+      }
+    ],
+    "pronunciation_audios": [
+      {
+        "url": "https://files.wanikani.com/v7zxwkl4apkovzc1xfky6l248i8h",
+        "metadata": {
+          "gender": "male",
+          "source_id": 4637,
+          "pronunciation": "ひ",
+          "voice_actor_id": 2,
+          "voice_actor_name": "Kenichi",
+          "voice_description": "Tokyo accent"
+        },
+        "content_type": "audio/webm"
+      },
+      {
+        "url": "https://files.wanikani.com/b2ysrn8qbf1ptpvk8ksjps5ktlon",
+        "metadata": {
+          "gender": "male",
+          "source_id": 4637,
+          "pronunciation": "ひ",
+          "voice_actor_id": 2,
+          "voice_actor_name": "Kenichi",
+          "voice_description": "Tokyo accent"
+        },
+        "content_type": "audio/mpeg"
+      },
+      {
+        "url": "https://files.wanikani.com/wlzsrjdvwo8hcav432mh97ouxfxk",
+        "metadata": {
+          "gender": "female",
+          "source_id": 22843,
+          "pronunciation": "ひ",
+          "voice_actor_id": 1,
+          "voice_actor_name": "Kyoko",
+          "voice_description": "Tokyo accent"
+        },
+        "content_type": "audio/webm"
+      },
+      {
+        "url": "https://files.wanikani.com/4vuxcni55dkrr6f9iahei4f1563e",
+        "metadata": {
+          "gender": "female",
+          "source_id": 22843,
+          "pronunciation": "ひ",
+          "voice_actor_id": 1,
+          "voice_actor_name": "Kyoko",
+          "voice_description": "Tokyo accent"
+        },
+        "content_type": "audio/mpeg"
+      }
+    ],
+    "lesson_position": 111,
+    "spaced_repetition_system_id": 2
+  }
+}

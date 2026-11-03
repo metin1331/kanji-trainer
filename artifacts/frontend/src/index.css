@@ -11,6 +11,16 @@ html.theme-switching *::after {
   animation: none !important;
 }
 
+@keyframes skeleton-shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  80%,
+  100% {
+    transform: translateX(100%);
+  }
+}
+
 @theme inline {
   --color-background: hsl(var(--background));
   --color-foreground: hsl(var(--foreground));
@@ -19,6 +29,11 @@ html.theme-switching *::after {
   --color-ring: var(--ring);
   --color-card: hsl(var(--card));
   --color-card-foreground: hsl(var(--card-foreground));
+  --color-popover: hsl(var(--card));
+  --color-popover-foreground: hsl(var(--card-foreground));
+  --color-accent: var(--app-muted);
+  --color-accent-foreground: var(--app-text);
+  --color-destructive: #dc2626;
   --color-muted: hsl(var(--muted));
   --color-muted-alternative: hsl(var(--muted-alternative));
   --color-muted-foreground: hsl(var(--muted-foreground));
@@ -53,6 +68,40 @@ html.theme-switching *::after {
   --radius-lg: var(--radius);
   --breakpoint-xxs: 30rem;
   --breakpoint-xs: 35rem;
+  --color-brand: var(--brand, oklch(0.608 0.209 27.03));
+  --color-brand-light: var(--brand-light, oklch(0.668 0.15 27.03));
+  --color-brand-lighter: var(--brand-lighter, oklch(0.738 0.10 27.03));
+  --color-brand-secondary: var(--brand-secondary, oklch(0.548 0.20 27.03));
+  --color-btn-drop: var(--btn-drop, rgb(0 0 0 / 0.4));
+  --color-btn-sheen: var(--btn-sheen, rgb(255 255 255 / 0.2));
+  --color-destructive-edge: var(--destructive-edge, #f61418);
+  --color-destructive-fg: var(--destructive-fg, #fff);
+  --color-destructive-hover: var(--destructive-hover, color-mix(in oklab, var(--color-destructive) 85%, black));
+  --color-destructive-top: var(--destructive-top, #fd4b4e);
+  --color-on-brand: var(--on-brand, #fff);
+  --color-amber: var(--amber);
+  --color-amber-fg: var(--amber-fg);
+  --color-amber-hover: var(--amber-hover);
+  --color-blue: var(--blue);
+  --color-blue-fg: var(--blue-fg);
+  --color-blue-hover: var(--blue-hover);
+  --color-green: var(--green);
+  --color-green-fg: var(--green-fg);
+  --color-green-hover: var(--green-hover);
+  --color-thumb: var(--thumb);
+  --color-smooth-50: var(--smooth-50);
+  --color-smooth-100: var(--smooth-100);
+  --color-smooth-200: var(--smooth-200);
+  --color-smooth-300: var(--smooth-300);
+  --color-smooth-400: var(--smooth-400);
+  --color-smooth-500: var(--smooth-500);
+  --color-smooth-600: var(--smooth-600);
+  --color-smooth-700: var(--smooth-700);
+  --color-smooth-800: var(--smooth-800);
+  --color-smooth-900: var(--smooth-900);
+  --color-smooth-950: var(--smooth-950);
+  --color-smooth-1000: var(--smooth-1000);
+  --color-color-destructive-hover: var(--color-destructive-hover);
 }
 
 :root {
@@ -100,17 +149,17 @@ html.theme-switching *::after {
     color-mix(in oklch, var(--main-600) 8%, transparent)
   );
 
-  --app-bg: #f9fafb;
-  --app-heatmap-alternative: #f9fafb;
-  --app-surface: #ffffff;
-  --app-muted: #f3f4f6;
+  --app-bg: #f5f7fa;
+  --app-heatmap-alternative: #f5f7fa;
+  --app-surface: rgba(255, 255, 255, 0.7);
+  --app-muted: rgba(245, 247, 250, 0.9);
   --app-heatmap: #f3f4f6;
-  --app-muted-alternative: #eeeff2;
-  --app-border: #f3f4f6;
-  --app-border-strong: #e5e7eb;
-  --app-text: #111827;
-  --app-text-secondary: #6b7280;
-  --app-text-muted: #9ca3af;
+  --app-muted-alternative: #eef2f7;
+  --app-border: rgba(220, 229, 247, 0.85);
+  --app-border-strong: rgba(203, 213, 225, 0.95);
+  --app-text: #1e293b;
+  --app-text-secondary: #64748b;
+  --app-text-muted: #94a3b8;
   --app-accent: color-mix(in oklch, var(--main-500) 10%, #ffffff);
   --app-accent-banner: color-mix(in oklch, var(--main-500) 10%, #ffffff);
 
@@ -119,6 +168,28 @@ html.theme-switching *::after {
   --heatmap-2: var(--main-200);
   --heatmap-3: var(--main-400);
   --heatmap-4: var(--main-500);
+  --amber: oklch(0.77 0.16 75);
+  --amber-fg: oklch(0.22 0 0);
+  --amber-hover: oklch(0.71 0.17 70);
+  --blue: oklch(0.62 0.19 256);
+  --blue-fg: #fff;
+  --blue-hover: oklch(0.56 0.2 256);
+  --green: oklch(0.7 0.17 152);
+  --green-fg: #fff;
+  --green-hover: oklch(0.64 0.18 152);
+  --thumb: #fff;
+  --smooth-50: oklch(0.99 0 0);
+  --smooth-100: oklch(0.972 0 0);
+  --smooth-200: oklch(0.945 0 0);
+  --smooth-300: oklch(0.91 0 0);
+  --smooth-400: oklch(0.865 0 0);
+  --smooth-500: oklch(0.81 0 0);
+  --smooth-600: oklch(0.74 0 0);
+  --smooth-700: oklch(0.66 0 0);
+  --smooth-800: oklch(0.56 0 0);
+  --smooth-900: oklch(0.47 0 0);
+  --smooth-950: oklch(0.36 0 0);
+  --smooth-1000: oklch(0.22 0 0);
 }
 
 .dark {
@@ -166,6 +237,28 @@ html.theme-switching *::after {
   --heatmap-2: var(--main-300);
   --heatmap-3: var(--main-500);
   --heatmap-4: var(--main-600);
+  --amber: oklch(0.8 0.15 75);
+  --amber-fg: oklch(0.2 0 0);
+  --amber-hover: oklch(0.85 0.14 72);
+  --blue: oklch(0.66 0.18 256);
+  --blue-fg: #fff;
+  --blue-hover: oklch(0.72 0.16 256);
+  --green: oklch(0.73 0.16 152);
+  --green-fg: oklch(0.2 0 0);
+  --green-hover: oklch(0.79 0.15 152);
+  --thumb: #fff;
+  --smooth-50: oklch(0.2 0 0);
+  --smooth-100: oklch(0.235 0 0);
+  --smooth-200: oklch(0.275 0 0);
+  --smooth-300: oklch(0.315 0 0);
+  --smooth-400: oklch(0.36 0 0);
+  --smooth-500: oklch(0.41 0 0);
+  --smooth-600: oklch(0.47 0 0);
+  --smooth-700: oklch(0.55 0 0);
+  --smooth-800: oklch(0.66 0 0);
+  --smooth-900: oklch(0.74 0 0);
+  --smooth-950: oklch(0.85 0 0);
+  --smooth-1000: oklch(0.96 0 0);
 }
 
 @layer base {
@@ -309,3 +402,19 @@ textarea {
   background: var(--app-border-strong);
   border-radius: 3px;
 } */
+
+@utility focus-ring {
+  &:focus-visible {
+    @apply ring-[3px] ring-ring/80;
+  }
+}
+
+@utility focus-ring-within {
+  &:has(:focus-visible) {
+    @apply ring-[3px] ring-ring/80;
+  }
+}
+
+@utility state-transition {
+    @apply transition-[background-color,border-color,color,box-shadow] duration-150 ease-out motion-reduce:transition-none;
+}

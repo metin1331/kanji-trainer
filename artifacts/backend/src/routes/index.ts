@@ -10,6 +10,7 @@ import backupRouter from "./backup";
 import studyActivityRouter from "./studyActivity";
 import categoriesRouter from "./categories";
 import pinnedWordsRouter from "./pinnedWords";
+import mojiMoriRouter from "./mojiMori";
 
 const router: IRouter = Router();
 
@@ -26,6 +27,7 @@ protectedRouter.use(backupRouter);
 protectedRouter.use(studyActivityRouter);
 protectedRouter.use(categoriesRouter);
 protectedRouter.use(pinnedWordsRouter);
+protectedRouter.use(mojiMoriRouter);
 
 router.use(protectedRouter);
 

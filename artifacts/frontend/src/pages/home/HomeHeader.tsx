@@ -1,5 +1,5 @@
 import { useLocation } from "wouter";
-import { Settings, Layers, BarChart2 } from "lucide-react";
+import { Settings, Layers, BarChart2, Languages } from "lucide-react";
 import { SearchBar } from "../../components/SearchBar";
 import { DailyGoalCard } from "../../components/DailyGoalCard";
 import { MiniHeatmapStrip } from "../../components/progress/MiniHeatmapStrip";
@@ -35,6 +35,17 @@ export function HomeHeader({
           {t("home.appSubtitle")}
         </p>
         <div className="-mt-1 -mr-2 flex items-center gap-0.5">
+          <button
+            onClick={() => navigate("/mojimori")}
+            className="rounded-xl p-2 text-white shadow-sm transition-transform hover:scale-105"
+            style={{
+              background:
+                "linear-gradient(135deg, #00aaff 0%, #ff00aa 50%, #a000f0 100%)",
+            }}
+            aria-label={t("a11y.mojimori")}
+          >
+            <Languages size={20} strokeWidth={2} />
+          </button>
           <button
             onClick={() => navigate("/srs")}
             className="text-app-text-muted hover:text-main-500 dark:hover:text-main-600 hover:bg-app-accent rounded-xl p-2 transition-colors"

@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="316 290 646 692" fill="none" role="img" aria-labelledby="title">
+  <title id="title">Mojimori logo mark</title>
+  <defs>
+    <linearGradient id="mojimori-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#E53935"/>
+      <stop offset="100%" stop-color="#FF6B6B"/>
+    </linearGradient>
+  </defs>
+  <path d="M 447,302 L 447,406 L 445,408 L 328,408 L 328,508 L 446,508 L 447,584 L 328,585 L 328,677 L 445,677 L 447,679 L 446,702 L 448,727 L 455,764 L 466,797 L 483,832 L 505,865 L 535,898 L 565,922 L 603,944 L 646,960 L 675,966 L 710,969 L 737,968 L 763,964 L 795,955 L 817,946 L 847,929 L 881,902 L 912,866 L 924,847 L 935,824 L 947,782 L 949,742 L 946,719 L 933,679 L 920,656 L 907,639 L 907,586 L 795,586 L 795,680 L 817,690 L 829,703 L 838,720 L 843,742 L 842,763 L 834,790 L 822,811 L 802,833 L 782,847 L 765,855 L 749,860 L 725,864 L 695,863 L 672,858 L 653,851 L 631,839 L 614,826 L 599,811 L 579,783 L 570,765 L 563,746 L 557,720 L 555,678 L 747,677 L 747,585 L 556,585 L 555,509 L 776,507 L 776,408 L 556,408 L 555,302 Z" fill="url(#mojimori-gradient)" fill-rule="evenodd"/>
+</svg>

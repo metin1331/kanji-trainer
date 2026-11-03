@@ -27,6 +27,20 @@ import { LoginPage } from "@/pages/LoginPage";
 import { RegisterPage } from "@/pages/RegisterPage";
 import { ForgotPasswordPage } from "@/pages/ForgotPasswordPage";
 import { ResetPasswordPage } from "@/pages/ResetPasswordPage";
+import { MojiMoriLevelsPage } from "@/pages/mojimori/MojiMoriLevelsPage";
+import { MojiMoriDashboardPage } from "@/pages/mojimori/MojiMoriDashboardPage";
+import { MojiMoriSeeAllPage } from "@/pages/mojimori/MojiMoriSeeAllPage";
+import { MojiMoriLevelDetailPage } from "@/pages/mojimori/MojiMoriLevelDetailPage";
+import { MojiMoriTypeIndexPage } from "@/pages/mojimori/MojiMoriTypeIndexPage";
+import { MojiMoriSearchPage } from "@/pages/mojimori/MojiMoriSearchPage";
+import { MojiMoriLessonPage, MojiMoriReviewPage, MojiMoriExtraPage } from "@/pages/mojimori/MojiMoriStudyPage";
+import { MojiMoriLessonPickerPage } from "@/pages/mojimori/MojiMoriLessonPickerPage";
+import { MojiMoriSettingsPage } from "@/pages/mojimori/MojiMoriSettingsPage";
+import { MojiMoriSubjectPage } from "@/pages/mojimori/MojiMoriSubjectPage";
+import { MojiMoriLayout } from "@/pages/mojimori/MojiMoriLayout";
+import { MojiMoriLoading } from "@/pages/mojimori/MojiMoriLoading";
+import { MojiRouteBar } from "@/pages/mojimori/MojiRouteBar";
+import NotFound from "@/pages/not-found";
 
 const PUBLIC_PREFIXES = [
   "/login",
@@ -45,6 +59,14 @@ function AuthGate({ children }: { children: ReactNode }) {
   const demo = isDemoMode();
 
   if (loading) {
+    if (path.startsWith("/mojimori")) {
+      const bare = path === "/mojimori/lessons" || path === "/mojimori/reviews";
+      return (
+        <MojiMoriLayout showHeader={!bare}>
+          <MojiMoriLoading />
+        </MojiMoriLayout>
+      );
+    }
     return (
       <div className="bg-app-bg flex min-h-dvh items-center justify-center">
         <LoadingSpinner
@@ -78,6 +100,22 @@ function AppRoutes() {
         <Route path="/register" component={RegisterPage} />
         <Route path="/forgot-password" component={ForgotPasswordPage} />
         <Route path="/reset-password" component={ResetPasswordPage} />
+        <Route path="/mojimori/search" component={MojiMoriSearchPage} />
+        <Route path="/mojimori/settings" component={MojiMoriSettingsPage} />
+        <Route path="/mojimori/lessons/picker" component={MojiMoriLessonPickerPage} />
+        <Route path="/mojimori/lessons" component={MojiMoriLessonPage} />
+        <Route path="/mojimori/reviews" component={MojiMoriReviewPage} />
+        <Route path="/mojimori/extra" component={MojiMoriExtraPage} />
+        <Route path="/mojimori/levels/:n/:type" component={MojiMoriSeeAllPage} />
+        <Route path="/mojimori/levels/:n" component={MojiMoriLevelDetailPage} />
+        <Route path="/mojimori/levels" component={MojiMoriLevelsPage} />
+        <Route path="/mojimori/radicals/:id" component={MojiMoriSubjectPage} />
+        <Route path="/mojimori/kanji/:id" component={MojiMoriSubjectPage} />
+        <Route path="/mojimori/vocabulary/:id" component={MojiMoriSubjectPage} />
+        <Route path="/mojimori/radicals" component={MojiMoriTypeIndexPage} />
+        <Route path="/mojimori/kanji" component={MojiMoriTypeIndexPage} />
+        <Route path="/mojimori/vocabulary" component={MojiMoriTypeIndexPage} />
+        <Route path="/mojimori" component={MojiMoriDashboardPage} />
         <Route path="/" component={HomePage} />
         <Route path="/progress" component={ProgressPage} />
         <Route path="/settings" component={SettingsPage} />
@@ -98,6 +136,7 @@ function AppRoutes() {
         <Route path="/learned/pronunciation" component={LearnedPronPage} />
         <Route path="/learned/meaning" component={LearnedMeaningPage} />
         <Route path="/study" component={StudyPage} />
+        <Route component={NotFound} />
       </Switch>
     </AuthGate>
   );
@@ -106,6 +145,7 @@ function AppRoutes() {
 function App() {
   return (
     <Router>
+      <MojiRouteBar />
       <AppRoutes />
     </Router>
   );

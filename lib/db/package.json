@@ -13,7 +13,8 @@
     "migrate-auth": "tsx ./scripts/migrate-auth.mts",
     "assign-owner": "tsx ./scripts/assign-data-to-owner.mts",
     "migrate-srs-user": "tsx ./scripts/migrate-srs-user.mts",
-    "clone": "tsx ./scripts/clone-database.mts"
+    "clone": "tsx ./scripts/clone-database.mts",
+    "seed-mojimori": "tsx ./scripts/seed-mojimori.mts"
   },
   "dependencies": {
     "drizzle-orm": "catalog:",

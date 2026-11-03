@@ -323,6 +323,185 @@ export const categoryWordsTable = pgTable(
   (t) => [primaryKey({ columns: [t.categoryId, t.wordId] })],
 );
 
+export const mojiMoriObjectTypes = ["radical", "kanji", "vocabulary"] as const;
+export type MojiMoriObjectType = (typeof mojiMoriObjectTypes)[number];
+
+export type MojiMoriMeaning = {
+  meaning: string;
+  primary: boolean;
+  acceptedAnswer: boolean;
+};
+
+export type MojiMoriAuxiliaryMeaning = {
+  meaning: string;
+  type: string;
+};
+
+export type MojiMoriReading = {
+  reading: string;
+  primary: boolean;
+  acceptedAnswer: boolean;
+  type?: string;
+};
+
+export type MojiMoriContextSentence = {
+  en: string;
+  ja: string;
+};
+
+export type MojiMoriCharacterImage = {
+  url: string;
+  contentType: string;
+  metadata: Record<string, unknown>;
+};
+
+export type MojiMoriPronunciationAudio = {
+  url: string;
+  contentType: string;
+  metadata: Record<string, unknown>;
+};
+
+/** Shared MojiMori catalog (same for every user). IDs match the source dump. */
+export const mojiMoriSubjectsTable = pgTable(
+  "moji_mori_subjects",
+  {
+    id: integer("id").primaryKey(),
+    objectType: text("object_type").notNull(),
+    level: integer("level").notNull(),
+    slug: text("slug").notNull(),
+    characters: text("characters"),
+    hiddenAt: timestamp("hidden_at", { withTimezone: true }),
+    meanings: jsonb("meanings")
+      .$type<MojiMoriMeaning[]>()
+      .notNull()
+      .default([]),
+    auxiliaryMeanings: jsonb("auxiliary_meanings")
+      .$type<MojiMoriAuxiliaryMeaning[]>()
+      .notNull()
+      .default([]),
+    readings: jsonb("readings")
+      .$type<MojiMoriReading[]>()
+      .notNull()
+      .default([]),
+    partsOfSpeech: text("parts_of_speech").array().notNull().default([]),
+    componentSubjectIds: integer("component_subject_ids")
+      .array()
+      .notNull()
+      .default([]),
+    amalgamationSubjectIds: integer("amalgamation_subject_ids")
+      .array()
+      .notNull()
+      .default([]),
+    visuallySimilarSubjectIds: integer("visually_similar_subject_ids")
+      .array()
+      .notNull()
+      .default([]),
+    meaningMnemonic: text("meaning_mnemonic").notNull().default(""),
+    meaningHint: text("meaning_hint").notNull().default(""),
+    mnemonicImageUrl: text("mnemonic_image_url"),
+    mnemonicImageAlt: text("mnemonic_image_alt"),
+    readingMnemonic: text("reading_mnemonic").notNull().default(""),
+    readingHint: text("reading_hint").notNull().default(""),
+    contextSentences: jsonb("context_sentences")
+      .$type<MojiMoriContextSentence[]>()
+      .notNull()
+      .default([]),
+    characterImages: jsonb("character_images")
+      .$type<MojiMoriCharacterImage[]>()
+      .notNull()
+      .default([]),
+    pronunciationAudios: jsonb("pronunciation_audios")
+      .$type<MojiMoriPronunciationAudio[]>()
+      .notNull()
+      .default([]),
+    lessonPosition: integer("lesson_position").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("moji_mori_subjects_type_level_idx").on(t.objectType, t.level),
+    index("moji_mori_subjects_characters_idx").on(t.characters),
+  ],
+);
+
+/** Per-user MojiMori level. Catalog subjects stay shared. */
+export const mojiMoriUsersTable = pgTable("moji_mori_users", {
+  userId: integer("user_id")
+    .primaryKey()
+    .references(() => usersTable.id, { onDelete: "cascade" }),
+  level: integer("level").notNull().default(1),
+  lessonBatchSize: integer("lesson_batch_size").notNull().default(5),
+  dailyLessonCap: integer("daily_lesson_cap").notNull().default(10),
+  interleaveLessons: boolean("interleave_lessons").notNull().default(true),
+  reviewOrder: text("review_order").notNull().default("shuffled"),
+  showSrsIndicator: boolean("show_srs_indicator").notNull().default(true),
+  preferredVoice: text("preferred_voice").notNull().default("random"),
+  lessonsAutoplay: boolean("lessons_autoplay").notNull().default(false),
+  reviewsAutoplay: boolean("reviews_autoplay").notNull().default(false),
+  extraStudyAutoplay: boolean("extra_study_autoplay").notNull().default(false),
+});
+
+/** Per-user SRS progress. Absent row means the item has not been started. */
+export const mojiMoriProgressTable = pgTable(
+  "moji_mori_progress",
+  {
+    userId: integer("user_id")
+      .notNull()
+      .references(() => usersTable.id, { onDelete: "cascade" }),
+    subjectId: integer("subject_id")
+      .notNull()
+      .references(() => mojiMoriSubjectsTable.id, { onDelete: "cascade" }),
+    srsStage: integer("srs_stage").notNull().default(0),
+    unlockedAt: timestamp("unlocked_at", { withTimezone: true }),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    passedAt: timestamp("passed_at", { withTimezone: true }),
+    burnedAt: timestamp("burned_at", { withTimezone: true }),
+    availableAt: timestamp("available_at", { withTimezone: true }),
+    incorrectCount: integer("incorrect_count").notNull().default(0),
+    meaningCorrect: integer("meaning_correct").notNull().default(0),
+    meaningIncorrect: integer("meaning_incorrect").notNull().default(0),
+    meaningCurrentStreak: integer("meaning_current_streak").notNull().default(0),
+    meaningMaxStreak: integer("meaning_max_streak").notNull().default(0),
+    readingCorrect: integer("reading_correct").notNull().default(0),
+    readingIncorrect: integer("reading_incorrect").notNull().default(0),
+    readingCurrentStreak: integer("reading_current_streak").notNull().default(0),
+    readingMaxStreak: integer("reading_max_streak").notNull().default(0),
+    meaningNote: text("meaning_note").notNull().default(""),
+    readingNote: text("reading_note").notNull().default(""),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.subjectId] })],
+);
+
+/** One row per quiz attempt. Dashboard stats read this log. */
+export const mojiMoriReviewsTable = pgTable(
+  "moji_mori_reviews",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => usersTable.id, { onDelete: "cascade" }),
+    subjectId: integer("subject_id")
+      .notNull()
+      .references(() => mojiMoriSubjectsTable.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(),
+    prompt: text("prompt").notNull(),
+    correct: boolean("correct").notNull(),
+    fromStage: integer("from_stage").notNull().default(0),
+    toStage: integer("to_stage").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("moji_mori_reviews_user_created_idx").on(t.userId, t.createdAt),
+    index("moji_mori_reviews_user_subject_idx").on(t.userId, t.subjectId),
+  ],
+);
+
 /** Per-list pinned words (scope matches client list keys, e.g. /words, meaning). */
 export const pinnedWordsTable = pgTable(
   "pinned_words",
