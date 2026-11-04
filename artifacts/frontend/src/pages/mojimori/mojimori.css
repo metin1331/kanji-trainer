@@ -2307,7 +2307,7 @@ button.forecast-row {
 }
 
 .mm-quiz__form {
-  padding: 0.85rem 1.1rem 0.4rem;
+  padding: 0.85rem 1.1rem 0rem;
 }
 
 .mm-quiz__ask-container {
@@ -2562,10 +2562,33 @@ button.forecast-row {
   grid-template-columns: repeat(5, minmax(0, 1fr));
   align-items: stretch;
   gap: 0.35rem;
-  padding: 0.85rem 1rem 1rem;
+  padding: 0.85rem 1rem 0.85rem;
 }
 
 @media (max-width: 640px) {
+  html:has(.moji-mori.is-bare .mm-quiz-page),
+  html:has(.moji-mori.is-bare .mm-quiz-page) body {
+    overflow: hidden;
+    height: 100%;
+    overscroll-behavior: none;
+  }
+
+  .moji-mori.is-bare:has(.mm-quiz-page) {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .moji-mori.is-bare:has(.mm-quiz-page) > main {
+    height: 100%;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: none;
+  }
+
   .moji-mori.is-bare > main:has(.mm-quiz-page) {
     max-width: none;
     margin: 0;
@@ -2581,6 +2604,22 @@ button.forecast-row {
     border: 0;
     border-radius: 0;
     box-shadow: none;
+  }
+
+  .mm-quiz__meter {
+    position: absolute;
+    z-index: 2;
+    top: env(safe-area-inset-top, 0px);
+    left: 0;
+    right: 0;
+  }
+
+  .mm-quiz__stage {
+    padding-top: calc(1.65rem + 6px + env(safe-area-inset-top, 0px));
+  }
+
+  .mm-quiz__tools {
+    padding-bottom: calc(0.85rem + env(safe-area-inset-bottom, 0px));
   }
 
   .mm-quiz__tool {
@@ -3868,13 +3907,13 @@ button.forecast-row {
     top: 0;
     left: 0;
     width: 100%;
-    height: 3.25rem;
+    height: calc(3.25rem + env(safe-area-inset-top, 0px));
     translate: none;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 0.75rem;
-    padding: 0 0.35rem 0 0.5rem;
+    padding: env(safe-area-inset-top, 0px) 0.35rem 0 0.5rem;
     border-radius: 0;
     border-bottom: 1px solid var(--color-nav-border);
     background: var(--color-nav-bg);
@@ -3882,7 +3921,7 @@ button.forecast-row {
   }
 
   .moji-mori > main {
-    padding-top: calc(3.25rem + 1rem);
+    padding-top: calc(3.25rem + env(safe-area-inset-top, 0px) + 1rem);
   }
 
   .moji-float-nav,
@@ -4079,7 +4118,7 @@ button.forecast-row {
   border-radius: 0;
   background: #fff;
   box-shadow: none;
-  padding-top: 3.25rem;
+  padding-top: calc(3.25rem + env(safe-area-inset-top, 0px));
   transform: translateX(100%);
   transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
 }

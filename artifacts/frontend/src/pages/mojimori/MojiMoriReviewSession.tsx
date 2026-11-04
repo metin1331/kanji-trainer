@@ -363,9 +363,117 @@ export function MojiMoriReviewSession({
   }, [infoWanted, detail.data, card?.id]);
 
   useEffect(() => {
-    if (mode === "ask") inputRef.current?.focus();
-    else goRef.current?.focus();
+    if (mode === "ask") inputRef.current?.focus({ preventScroll: true });
+    else goRef.current?.focus({ preventScroll: true });
   }, [current?.subjectId, current?.prompt, current?.retry, mode]);
+
+  useEffect(() => {
+    const narrow = window.matchMedia("(max-width: 640px)");
+    if (!narrow.matches) return;
+    let typing = false;
+    const pin = () => {
+      if (window.scrollX !== 0 || window.scrollY !== 0) window.scrollTo(0, 0);
+      if (!typing) return;
+      const scroller = document.querySelector(".moji-mori.is-bare > main");
+      if (scroller instanceof HTMLElement && scroller.scrollTop !== 0) {
+        scroller.scrollTop = 0;
+      }
+    };
+    const timers: number[] = [];
+    const arm = () => {
+      pin();
+      timers.splice(0).forEach((id) => window.clearTimeout(id));
+      for (const delay of [40, 120, 280, 480]) {
+        timers.push(window.setTimeout(pin, delay));
+      }
+    };
+    let bound: Element | null = null;
+    const scroller = () =>
+      document.querySelector(".moji-mori.is-bare > main");
+    const unbind = () => {
+      bound?.removeEventListener("scroll", pin);
+      bound = null;
+    };
+    const onFocusIn = (event: FocusEvent) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      if (!target.closest(".mm-quiz input")) return;
+      typing = true;
+      arm();
+      window.visualViewport?.addEventListener("scroll", pin);
+      window.visualViewport?.addEventListener("resize", pin);
+      unbind();
+      bound = scroller();
+      bound?.addEventListener("scroll", pin);
+    };
+    const onFocusOut = (event: FocusEvent) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      if (!target.closest(".mm-quiz input")) return;
+      typing = false;
+      timers.splice(0).forEach((id) => window.clearTimeout(id));
+      window.visualViewport?.removeEventListener("scroll", pin);
+      window.visualViewport?.removeEventListener("resize", pin);
+      unbind();
+      pin();
+    };
+    document.addEventListener("focusin", onFocusIn);
+    document.addEventListener("focusout", onFocusOut);
+    window.addEventListener("scroll", pin, { passive: true });
+    return () => {
+      timers.forEach((id) => window.clearTimeout(id));
+      document.removeEventListener("focusin", onFocusIn);
+      document.removeEventListener("focusout", onFocusOut);
+      window.removeEventListener("scroll", pin);
+      window.visualViewport?.removeEventListener("scroll", pin);
+      window.visualViewport?.removeEventListener("resize", pin);
+      unbind();
+    };
+  }, []);
+
+  useEffect(() => {
+    const stage = document.querySelector<HTMLElement>(".mm-quiz__stage");
+    if (!stage) return;
+    const root = document.documentElement;
+    const body = document.body;
+    const previousRoot = root.style.backgroundColor;
+    const previousBody = body.style.backgroundColor;
+    let meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+    const created = !meta;
+    if (!meta) {
+      meta = document.createElement("meta");
+      meta.setAttribute("name", "theme-color");
+      document.head.appendChild(meta);
+    }
+    const previousTheme = created ? null : meta.getAttribute("content");
+    const apply = () => {
+      const current = document.querySelector<HTMLElement>(".mm-quiz__stage");
+      if (!current || !meta) return;
+      const raw = getComputedStyle(current).backgroundColor;
+      const canvas = document.createElement("canvas").getContext("2d");
+      let color = raw;
+      if (canvas) {
+        canvas.fillStyle = "#010101";
+        canvas.fillStyle = raw;
+        if (canvas.fillStyle && canvas.fillStyle !== "#010101") color = canvas.fillStyle;
+      }
+      meta.setAttribute("content", color);
+      root.style.backgroundColor = color;
+      body.style.backgroundColor = color;
+    };
+    apply();
+    const observer = new MutationObserver(apply);
+    observer.observe(root, { attributes: true, attributeFilter: ["class"] });
+    return () => {
+      observer.disconnect();
+      root.style.backgroundColor = previousRoot;
+      body.style.backgroundColor = previousBody;
+      if (!meta) return;
+      if (created) meta.remove();
+      else if (previousTheme == null) meta.removeAttribute("content");
+      else meta.setAttribute("content", previousTheme);
+    };
+  }, [card?.id, card?.objectType]);
 
   function shakeFor(wanted: string | null) {
     if (wanted === "meaning") return t("mojimori.study.lookingMeaning");
@@ -878,11 +986,11 @@ export function MojiMoriReviewSession({
                 onTab={setKanaTab}
                 onInsert={(kana) => {
                   setDraft((value) => value + kana);
-                  inputRef.current?.focus();
+                  inputRef.current?.focus({ preventScroll: true });
                 }}
                 onBackspace={() => {
                   setDraft((value) => [...value].slice(0, -1).join(""));
-                  inputRef.current?.focus();
+                  inputRef.current?.focus({ preventScroll: true });
                 }}
               />
             ) : null}
