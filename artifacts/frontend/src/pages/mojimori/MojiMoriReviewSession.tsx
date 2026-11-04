@@ -370,64 +370,67 @@ export function MojiMoriReviewSession({
   useEffect(() => {
     const narrow = window.matchMedia("(max-width: 640px)");
     if (!narrow.matches) return;
+    const root = document.documentElement;
     let typing = false;
+    let frame = 0;
+    let releaseTimer = 0;
     const pin = () => {
-      if (window.scrollX !== 0 || window.scrollY !== 0) window.scrollTo(0, 0);
-      if (!typing) return;
+      const offset = window.visualViewport?.offsetTop ?? 0;
+      if (window.scrollX !== 0 || window.scrollY !== 0 || offset !== 0) {
+        window.scrollTo(0, 0);
+      }
+      const still = window.visualViewport?.offsetTop ?? 0;
+      if (still !== 0) window.scrollBy(0, -still);
+      root.scrollTop = 0;
+      document.body.scrollTop = 0;
       const scroller = document.querySelector(".moji-mori.is-bare > main");
       if (scroller instanceof HTMLElement && scroller.scrollTop !== 0) {
         scroller.scrollTop = 0;
       }
     };
-    const timers: number[] = [];
-    const arm = () => {
+    const loop = () => {
       pin();
-      timers.splice(0).forEach((id) => window.clearTimeout(id));
-      for (const delay of [40, 120, 280, 480]) {
-        timers.push(window.setTimeout(pin, delay));
-      }
+      if (typing) frame = window.requestAnimationFrame(loop);
     };
-    let bound: Element | null = null;
-    const scroller = () =>
-      document.querySelector(".moji-mori.is-bare > main");
-    const unbind = () => {
-      bound?.removeEventListener("scroll", pin);
-      bound = null;
-    };
-    const onFocusIn = (event: FocusEvent) => {
-      const target = event.target;
-      if (!(target instanceof HTMLElement)) return;
-      if (!target.closest(".mm-quiz input")) return;
+    const start = () => {
+      if (typing) return;
       typing = true;
-      arm();
+      root.classList.add("mm-quiz-lock");
+      frame = window.requestAnimationFrame(loop);
       window.visualViewport?.addEventListener("scroll", pin);
       window.visualViewport?.addEventListener("resize", pin);
-      unbind();
-      bound = scroller();
-      bound?.addEventListener("scroll", pin);
     };
-    const onFocusOut = (event: FocusEvent) => {
-      const target = event.target;
-      if (!(target instanceof HTMLElement)) return;
-      if (!target.closest(".mm-quiz input")) return;
+    const stop = () => {
       typing = false;
-      timers.splice(0).forEach((id) => window.clearTimeout(id));
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(releaseTimer);
+      root.classList.remove("mm-quiz-lock");
       window.visualViewport?.removeEventListener("scroll", pin);
       window.visualViewport?.removeEventListener("resize", pin);
-      unbind();
       pin();
     };
-    document.addEventListener("focusin", onFocusIn);
+    const isQuizInput = (target: EventTarget | null) =>
+      target instanceof HTMLElement && Boolean(target.closest(".mm-quiz input"));
+    const onPointerDown = (event: PointerEvent) => {
+      if (!isQuizInput(event.target)) return;
+      start();
+      window.clearTimeout(releaseTimer);
+      releaseTimer = window.setTimeout(() => {
+        if (!isQuizInput(document.activeElement)) stop();
+      }, 500);
+    };
+    const onFocusOut = (event: FocusEvent) => {
+      if (!isQuizInput(event.target)) return;
+      stop();
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
     document.addEventListener("focusout", onFocusOut);
-    window.addEventListener("scroll", pin, { passive: true });
+    window.addEventListener("scroll", pin, { capture: true, passive: true });
     return () => {
-      timers.forEach((id) => window.clearTimeout(id));
-      document.removeEventListener("focusin", onFocusIn);
+      stop();
+      document.removeEventListener("pointerdown", onPointerDown, true);
       document.removeEventListener("focusout", onFocusOut);
-      window.removeEventListener("scroll", pin);
-      window.visualViewport?.removeEventListener("scroll", pin);
-      window.visualViewport?.removeEventListener("resize", pin);
-      unbind();
+      window.removeEventListener("scroll", pin, { capture: true });
     };
   }, []);
 
