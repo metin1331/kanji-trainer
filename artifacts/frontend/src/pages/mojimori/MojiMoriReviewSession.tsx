@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { motion } from "motion/react";
 import {
@@ -433,6 +433,34 @@ export function MojiMoriReviewSession({
       window.removeEventListener("scroll", pin, { capture: true });
     };
   }, []);
+
+  useLayoutEffect(() => {
+    const tools = document.querySelector<HTMLElement>(".mm-quiz__tools");
+    if (!tools) return;
+    const root = document.documentElement;
+    const place = () => {
+      const rect = tools.getBoundingClientRect();
+      root.style.setProperty("--mm-toast-top", `${Math.round(rect.bottom + 8)}px`);
+      root.style.setProperty("--mm-toast-left", `${Math.round(rect.left)}px`);
+      root.style.setProperty("--mm-toast-width", `${Math.round(rect.width)}px`);
+    };
+    place();
+    const box = tools.closest(".mm-quiz") ?? tools;
+    const observer = new ResizeObserver(place);
+    observer.observe(box);
+    window.addEventListener("resize", place);
+    window.visualViewport?.addEventListener("resize", place);
+    window.visualViewport?.addEventListener("scroll", place);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", place);
+      window.visualViewport?.removeEventListener("resize", place);
+      window.visualViewport?.removeEventListener("scroll", place);
+      root.style.removeProperty("--mm-toast-top");
+      root.style.removeProperty("--mm-toast-left");
+      root.style.removeProperty("--mm-toast-width");
+    };
+  }, [card?.id, sheet, pending, notice]);
 
   useEffect(() => {
     const stage = document.querySelector<HTMLElement>(".mm-quiz__stage");

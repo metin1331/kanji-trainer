@@ -2559,6 +2559,23 @@ button.forecast-row {
   background-color:  var(--color-vocabulary);
 } */
 
+html:has(.mm-quiz__tools) [data-slot="toast-viewport"] {
+  top: var(--mm-toast-top);
+  left: var(--mm-toast-left);
+  bottom: auto;
+  right: auto;
+  width: var(--mm-toast-width);
+  max-width: none;
+  padding: 0;
+  flex-direction: column;
+  align-items: center;
+}
+
+html:has(.mm-quiz__tools) [data-slot="toast"] {
+  width: auto;
+  max-width: min(28rem, 100%);
+}
+
 .mm-quiz__tools {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
