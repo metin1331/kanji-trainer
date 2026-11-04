@@ -1,5 +1,35 @@
 import * as wanakana from "wanakana";
 import type { HiddenScript } from "../types";
+import { ROMAJI_COMPLETIONS } from "./romajiCompletions";
+
+const VALID_ROMAJI = new Set<string>();
+for (const word of ROMAJI_COMPLETIONS) {
+  for (let i = 1; i <= word.length; i++) VALID_ROMAJI.add(word.slice(0, i));
+}
+
+/** True when every Latin run can still become kana. */
+export function readingInputAllows(value: string): boolean {
+  const runs = value.match(/[A-Za-z]+/g);
+  if (!runs) return true;
+  return runs.every((run) => VALID_ROMAJI.has(run.toLowerCase()));
+}
+
+/** Reading answers have to be kana. A leftover Latin letter is not an answer. */
+export function readingAnswerIncomplete(value: string): boolean {
+  return /[A-Za-z]/.test(romajiToKanaInput(value.trim()));
+}
+
+/** Block a Latin key that would leave a fragment that cannot become kana. */
+export function blocksReadingLatin(
+  value: string,
+  key: string,
+  start: number,
+  end: number,
+): boolean {
+  if (key.length !== 1 || !/[A-Za-z]/.test(key)) return false;
+  const next = value.slice(0, start) + key + value.slice(end);
+  return !readingInputAllows(romajiToKanaInput(next));
+}
 
 /** Replace contiguous Latin runs with kana (fixes mixed し+ppai cases). */
 export function romajiToKanaInput(

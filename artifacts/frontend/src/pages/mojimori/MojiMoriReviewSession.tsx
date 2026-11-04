@@ -31,7 +31,12 @@ import {
   type StudyGrade,
 } from "../../hooks/useMojiMori";
 import { useTranslation } from "../../i18n/I18nProvider";
-import { romajiToKanaInput } from "../../lib/japaneseInput";
+import {
+  blocksReadingLatin,
+  readingAnswerIncomplete,
+  readingInputAllows,
+  romajiToKanaInput,
+} from "../../lib/japaneseInput";
 import {
   kanjiReadingsByKind,
   pickCharacterImage,
@@ -48,7 +53,11 @@ type Task = { subjectId: number; prompt: Prompt; retry: boolean };
 
 function parkMiss(tasks: Task[], missed: Task): Task[] {
   const rest = tasks.slice(1);
-  const again: Task = { subjectId: missed.subjectId, prompt: missed.prompt, retry: true };
+  const again: Task = {
+    subjectId: missed.subjectId,
+    prompt: missed.prompt,
+    retry: true,
+  };
   const later = [...rest, again];
   const other = later.findIndex((task) => task.subjectId !== missed.subjectId);
   if (other > 0) {
@@ -62,70 +71,148 @@ type Attempt = { answer: string; correct: boolean };
 type ItemRecord = { meaning?: Attempt; reading?: Attempt; grade?: StudyGrade };
 type Sheet = "none" | "last" | "info" | "kana";
 
-const KANA_PAGES: { id: string; label: string; cells: Array<[string, string] | null> }[] = [
-  { id: "a", label: "あ", cells: [["あ", "a"], ["い", "i"], ["う", "u"], ["え", "e"], ["お", "o"]] },
+const KANA_PAGES: {
+  id: string;
+  label: string;
+  cells: Array<[string, string] | null>;
+}[] = [
+  {
+    id: "a",
+    label: "あ",
+    cells: [
+      ["あ", "a"],
+      ["い", "i"],
+      ["う", "u"],
+      ["え", "e"],
+      ["お", "o"],
+    ],
+  },
   {
     id: "k",
     label: "か",
     cells: [
-      ["か", "ka"], ["き", "ki"], ["く", "ku"], ["け", "ke"], ["こ", "ko"],
-      ["きゃ", "kya"], null, ["きゅ", "kyu"], null, ["きょ", "kyo"],
+      ["か", "ka"],
+      ["き", "ki"],
+      ["く", "ku"],
+      ["け", "ke"],
+      ["こ", "ko"],
+      ["きゃ", "kya"],
+      null,
+      ["きゅ", "kyu"],
+      null,
+      ["きょ", "kyo"],
     ],
   },
   {
     id: "s",
     label: "さ",
     cells: [
-      ["さ", "sa"], ["し", "shi"], ["す", "su"], ["せ", "se"], ["そ", "so"],
-      ["しゃ", "sha"], null, ["しゅ", "shu"], null, ["しょ", "sho"],
+      ["さ", "sa"],
+      ["し", "shi"],
+      ["す", "su"],
+      ["せ", "se"],
+      ["そ", "so"],
+      ["しゃ", "sha"],
+      null,
+      ["しゅ", "shu"],
+      null,
+      ["しょ", "sho"],
     ],
   },
   {
     id: "t",
     label: "た",
     cells: [
-      ["た", "ta"], ["ち", "chi"], ["つ", "tsu"], ["て", "te"], ["と", "to"],
-      ["ちゃ", "cha"], null, ["ちゅ", "chu"], null, ["ちょ", "cho"],
+      ["た", "ta"],
+      ["ち", "chi"],
+      ["つ", "tsu"],
+      ["て", "te"],
+      ["と", "to"],
+      ["ちゃ", "cha"],
+      null,
+      ["ちゅ", "chu"],
+      null,
+      ["ちょ", "cho"],
     ],
   },
   {
     id: "n",
     label: "な",
     cells: [
-      ["な", "na"], ["に", "ni"], ["ぬ", "nu"], ["ね", "ne"], ["の", "no"],
-      ["にゃ", "nya"], null, ["にゅ", "nyu"], null, ["にょ", "nyo"],
+      ["な", "na"],
+      ["に", "ni"],
+      ["ぬ", "nu"],
+      ["ね", "ne"],
+      ["の", "no"],
+      ["にゃ", "nya"],
+      null,
+      ["にゅ", "nyu"],
+      null,
+      ["にょ", "nyo"],
     ],
   },
   {
     id: "h",
     label: "は",
     cells: [
-      ["は", "ha"], ["ひ", "hi"], ["ふ", "fu"], ["へ", "he"], ["ほ", "ho"],
-      ["ひゃ", "hya"], null, ["ひゅ", "hyu"], null, ["ひょ", "hyo"],
+      ["は", "ha"],
+      ["ひ", "hi"],
+      ["ふ", "fu"],
+      ["へ", "he"],
+      ["ほ", "ho"],
+      ["ひゃ", "hya"],
+      null,
+      ["ひゅ", "hyu"],
+      null,
+      ["ひょ", "hyo"],
     ],
   },
   {
     id: "m",
     label: "ま",
     cells: [
-      ["ま", "ma"], ["み", "mi"], ["む", "mu"], ["め", "me"], ["も", "mo"],
-      ["みゃ", "mya"], null, ["みゅ", "myu"], null, ["みょ", "myo"],
+      ["ま", "ma"],
+      ["み", "mi"],
+      ["む", "mu"],
+      ["め", "me"],
+      ["も", "mo"],
+      ["みゃ", "mya"],
+      null,
+      ["みゅ", "myu"],
+      null,
+      ["みょ", "myo"],
     ],
   },
   {
     id: "r",
     label: "ら",
     cells: [
-      ["ら", "ra"], ["り", "ri"], ["る", "ru"], ["れ", "re"], ["ろ", "ro"],
-      ["りゃ", "rya"], null, ["りゅ", "ryu"], null, ["りょ", "ryo"],
+      ["ら", "ra"],
+      ["り", "ri"],
+      ["る", "ru"],
+      ["れ", "re"],
+      ["ろ", "ro"],
+      ["りゃ", "rya"],
+      null,
+      ["りゅ", "ryu"],
+      null,
+      ["りょ", "ryo"],
     ],
   },
   {
     id: "x",
     label: "雑",
     cells: [
-      ["や", "ya"], null, ["ゆ", "yu"], null, ["よ", "yo"],
-      ["わ", "wa"], null, ["を", "wo"], ["ん", "n"], ["っ", "ltu"],
+      ["や", "ya"],
+      null,
+      ["ゆ", "yu"],
+      null,
+      ["よ", "yo"],
+      ["わ", "wa"],
+      null,
+      ["を", "wo"],
+      ["ん", "n"],
+      ["っ", "ltu"],
       ["ー", "-"],
     ],
   },
@@ -200,7 +287,10 @@ export function MojiMoriReviewSession({
   const [infoDenied, setInfoDenied] = useState(false);
   const [pending, setPending] = useState<null | "ok" | "miss">(null);
   const [wrapUp, setWrapUp] = useState(false);
-  const [srsFlash, setSrsFlash] = useState<{ stage: number; up: boolean } | null>(null);
+  const [srsFlash, setSrsFlash] = useState<{
+    stage: number;
+    up: boolean;
+  } | null>(null);
   const [infoWanted, setInfoWanted] = useState(false);
   const [busy, setBusy] = useState(false);
   const [kanaTab, setKanaTab] = useState("a");
@@ -220,7 +310,11 @@ export function MojiMoriReviewSession({
     if (feed.data) {
       const items = feed.data.items;
       const tasks = items.flatMap((item) =>
-        item.prompts.map((prompt) => ({ subjectId: item.id, prompt, retry: false })),
+        item.prompts.map((prompt) => ({
+          subjectId: item.id,
+          prompt,
+          retry: false,
+        })),
       );
       setCards(items);
       setQueue(shuffle(tasks));
@@ -232,7 +326,10 @@ export function MojiMoriReviewSession({
     }
   }, [ready, feed.data, feed.isLoading, feed.isFetching]);
 
-  const byId = useMemo(() => new Map((cards ?? []).map((card) => [card.id, card])), [cards]);
+  const byId = useMemo(
+    () => new Map((cards ?? []).map((card) => [card.id, card])),
+    [cards],
+  );
   const current = queue[0];
   const card = current ? byId.get(current.subjectId) : undefined;
   const infoOn = sheet === "info" && Boolean(card);
@@ -245,7 +342,11 @@ export function MojiMoriReviewSession({
     return sum + (record.meaning ? 1 : 0) + (record.reading ? 1 : 0);
   }, 0);
   const correct = Object.values(records).reduce((sum, record) => {
-    return sum + (record.meaning?.correct ? 1 : 0) + (record.reading?.correct ? 1 : 0);
+    return (
+      sum +
+      (record.meaning?.correct ? 1 : 0) +
+      (record.reading?.correct ? 1 : 0)
+    );
   }, 0);
   const percent = asked === 0 ? 100 : Math.round((100 * correct) / asked);
 
@@ -270,6 +371,11 @@ export function MojiMoriReviewSession({
     if (wanted === "meaning") return t("mojimori.study.lookingMeaning");
     if (wanted === "reading") return t("mojimori.study.lookingReading");
     return t("mojimori.study.shake", { type: wanted ?? "" });
+  }
+
+  function pulseShake() {
+    setShaking(false);
+    requestAnimationFrame(() => setShaking(true));
   }
 
   function kindLabel(type: string) {
@@ -320,7 +426,10 @@ export function MojiMoriReviewSession({
   }
 
   useEffect(() => {
-    const autoplay = source === "extra" ? prefs.data?.extraStudyAutoplay : prefs.data?.reviewsAutoplay;
+    const autoplay =
+      source === "extra"
+        ? prefs.data?.extraStudyAutoplay
+        : prefs.data?.reviewsAutoplay;
     if (!autoplay || !card || card.objectType !== "vocabulary") return;
     if (!current || current.prompt !== "reading") return;
     const mark = `${card.id}:${source}`;
@@ -335,7 +444,8 @@ export function MojiMoriReviewSession({
 
   function toggleInfo() {
     if (!card || !current) return;
-    const answered = mode === "miss" || Boolean(recordsRef.current[card.id]?.[current.prompt]);
+    const answered =
+      mode === "miss" || Boolean(recordsRef.current[card.id]?.[current.prompt]);
     if (!answered) {
       setInfoDenied(true);
       window.setTimeout(() => setInfoDenied(false), 1600);
@@ -354,7 +464,9 @@ export function MojiMoriReviewSession({
     setWrapUp((on) => {
       if (!on) {
         setQueue((tasks) =>
-          tasks.filter((task, index) => index === 0 || recordsRef.current[task.subjectId]),
+          tasks.filter(
+            (task, index) => index === 0 || recordsRef.current[task.subjectId],
+          ),
         );
       }
       return !on;
@@ -369,7 +481,14 @@ export function MojiMoriReviewSession({
     }
     const raw = draft.trim();
     if (!raw) return;
-    const submitted = current.prompt === "reading" ? romajiToKanaInput(raw) : raw;
+    const submitted =
+      current.prompt === "reading" ? romajiToKanaInput(raw) : raw;
+    if (current.prompt === "reading" && readingAnswerIncomplete(submitted)) {
+      setDraft(submitted);
+      pulseShake();
+      holdCaret(inputRef.current);
+      return;
+    }
     setBusy(true);
     setNotice("");
     try {
@@ -386,16 +505,20 @@ export function MojiMoriReviewSession({
           toast(t("mojimori.study.unusualSpelling"));
           setNotice("");
         } else setNotice(shakeFor(checked.wantedType));
-        setShaking(false);
-        requestAnimationFrame(() => setShaking(true));
+        pulseShake();
         holdCaret(inputRef.current);
         return;
       }
       const prev = recordsRef.current[card.id] ?? {};
       const first = !prev[current.prompt];
       const next: ItemRecord = { ...prev };
-      if (first) next[current.prompt] = { answer: submitted, correct: checked.correct };
-      if (first && card.prompts.every((prompt) => next[prompt]) && !next.grade) {
+      if (first)
+        next[current.prompt] = { answer: submitted, correct: checked.correct };
+      if (
+        first &&
+        card.prompts.every((prompt) => next[prompt]) &&
+        !next.grade
+      ) {
         const result = await grade.mutateAsync({
           kind: source === "extra" ? "extra" : "review",
           subjectId: card.id,
@@ -418,12 +541,17 @@ export function MojiMoriReviewSession({
         setPending("miss");
         setInfoWanted(true);
         setInfoDenied(false);
-        if (next.grade) setSrsFlash({ stage: next.grade.srsStage, up: next.grade.passed });
+        if (next.grade)
+          setSrsFlash({ stage: next.grade.srsStage, up: next.grade.passed });
         return;
       }
       if (first && checked.lenient) {
         toast(t("mojimori.study.helpMeaning"));
-      } else if (first && current.prompt === "meaning" && checked.multipleMeanings) {
+      } else if (
+        first &&
+        current.prompt === "meaning" &&
+        checked.multipleMeanings
+      ) {
         toast(t("mojimori.study.multipleMeanings"));
       }
       if (first && current.prompt === "reading" && checked.multipleReadings) {
@@ -434,7 +562,9 @@ export function MojiMoriReviewSession({
       }
       setPending("ok");
     } catch (err) {
-      setNotice(err instanceof Error ? err.message : t("mojimori.study.incorrect"));
+      setNotice(
+        err instanceof Error ? err.message : t("mojimori.study.incorrect"),
+      );
     } finally {
       setBusy(false);
     }
@@ -461,7 +591,11 @@ export function MojiMoriReviewSession({
       } else if (event.key === "/") {
         event.preventDefault();
         setSheet((open) => (open === "kana" ? "none" : "kana"));
-      } else if ((event.key === "j" || event.key === "J") && current?.prompt === "reading" && tracks[0]) {
+      } else if (
+        (event.key === "j" || event.key === "J") &&
+        current?.prompt === "reading" &&
+        tracks[0]
+      ) {
         event.preventDefault();
         play(tracks[0].url);
       }
@@ -473,7 +607,11 @@ export function MojiMoriReviewSession({
   if (cards == null && feed.data) {
     const items = feed.data.items;
     const tasks = items.flatMap((item) =>
-      item.prompts.map((prompt) => ({ subjectId: item.id, prompt, retry: false })),
+      item.prompts.map((prompt) => ({
+        subjectId: item.id,
+        prompt,
+        retry: false,
+      })),
     );
     setCards(items);
     setQueue(shuffle(tasks));
@@ -487,7 +625,11 @@ export function MojiMoriReviewSession({
           <h1>
             {total === 0
               ? t("mojimori.study.empty")
-              : t(source === "extra" ? "mojimori.study.extraDone" : "mojimori.study.reviewsDone")}
+              : t(
+                  source === "extra"
+                    ? "mojimori.study.extraDone"
+                    : "mojimori.study.reviewsDone",
+                )}
           </h1>
           <Link href="/mojimori" className="moji-btn-primary">
             {t("mojimori.study.returnHome")}
@@ -500,18 +642,27 @@ export function MojiMoriReviewSession({
         ? t("mojimori.study.meaningWord")
         : t("mojimori.study.readingWord");
     const audioEnabled = current.prompt === "reading" && tracks.length > 0;
-    const infoAnswered = mode === "miss" || Boolean(records[card.id]?.[current.prompt]);
+    const infoAnswered =
+      mode === "miss" || Boolean(records[card.id]?.[current.prompt]);
     const wrapCount = new Set(
-      queue.filter((task) => records[task.subjectId]).map((task) => task.subjectId),
+      queue
+        .filter((task) => records[task.subjectId])
+        .map((task) => task.subjectId),
     ).size;
     return (
       <section className="mm-quiz" data-kind={card.objectType}>
         <div className="mm-quiz__meter" aria-hidden="true">
-          <span style={{ width: total === 0 ? "0%" : `${(done / total) * 100}%` }} />
+          <span
+            style={{ width: total === 0 ? "0%" : `${(done / total) * 100}%` }}
+          />
         </div>
         <header className="mm-quiz__stage" data-kind={card.objectType}>
           <div className="mm-quiz__stage-bar">
-            <Link href="/mojimori" className="mm-quiz__home" title={t("mojimori.study.returnHome")}>
+            <Link
+              href="/mojimori"
+              className="mm-quiz__home"
+              title={t("mojimori.study.returnHome")}
+            >
               <House size={18} />
             </Link>
             <div className="mm-quiz__stats">
@@ -530,23 +681,43 @@ export function MojiMoriReviewSession({
             </div>
           </div>
           <div className="mm-quiz__glyph">
+            {source === "extra" ? (
+              <p className="mm-quiz__mode">
+                {extraMode === "recent-mistakes"
+                  ? t("mojimori.study.extraRecentMistakes")
+                  : extraMode === "cooked"
+                    ? t("mojimori.study.extraLegendary")
+                    : t("mojimori.study.extraRecentLessons")}
+              </p>
+            ) : null}
             <Glyph card={card} />
           </div>
           <div className="mm-quiz__stage-footer">
             {showSrs && srsFlash ? (
               <motion.span
                 key={`${srsFlash.up ? "up" : "down"}-${srsFlash.stage}`}
-                className={`mm-quiz__srs${srsFlash.up ? " is-up" : " is-down"}`}
+                className={`mm-quiz__srs${srsFlash.up ? "is-up" : "is-down"}`}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
               >
-               {srsFlash.up ? <ArrowBigUpDash size={16} /> : <ArrowBigDownDash size={16} />}
+                {srsFlash.up ? (
+                  <ArrowBigUpDash size={16} />
+                ) : (
+                  <ArrowBigDownDash size={16} />
+                )}
                 {t(`mojimori.srs.${stageGroup(srsFlash.stage)}`)}
               </motion.span>
             ) : null}
           </div>
         </header>
+
+        <div className="mm-quiz__ask-container">
+          <p className="mm-quiz__ask" data-kind={card.objectType}>
+            <span>{kindLabel(card.objectType)}</span>
+            <span>{promptWord}</span>
+          </p>
+        </div>
         <form
           className="mm-quiz__form"
           onSubmit={(event) => {
@@ -554,13 +725,9 @@ export function MojiMoriReviewSession({
             void submitAnswer();
           }}
         >
-          <p className="mm-quiz__ask" data-kind={card.objectType}>
-            <span>{kindLabel(card.objectType)}</span>
-            <span>{promptWord}</span>
-          </p>
           {notice ? <p className="mm-quiz__exception">{notice}</p> : null}
           <div
-            className={`mm-quiz__entry${shaking ? " is-shaking" : ""}${pending === "ok" ? " is-ok" : ""}${pending === "miss" ? " is-bad" : ""}`}
+            className={`mm-quiz__entry ${shaking ? "is-shaking" : ""}${pending === "ok" ? "is-ok" : ""}${pending === "miss" ? "is-bad" : ""}`}
             onAnimationEnd={() => setShaking(false)}
           >
             {mode === "miss" ? (
@@ -575,13 +742,50 @@ export function MojiMoriReviewSession({
                 autoComplete="off"
                 spellCheck={false}
                 readOnly={pending === "ok"}
+                onKeyDown={(event) => {
+                  if (current.prompt !== "reading") return;
+                  if (
+                    event.ctrlKey ||
+                    event.metaKey ||
+                    event.altKey ||
+                    event.nativeEvent.isComposing
+                  )
+                    return;
+                  const el = event.currentTarget;
+                  if (
+                    blocksReadingLatin(
+                      draft,
+                      event.key,
+                      el.selectionStart ?? draft.length,
+                      el.selectionEnd ?? draft.length,
+                    )
+                  ) {
+                    event.preventDefault();
+                    pulseShake();
+                  }
+                }}
                 onChange={(event) => {
                   const value = event.target.value;
-                  setDraft(current.prompt === "reading" ? romajiToKanaInput(value) : value);
+                  if (current.prompt !== "reading") {
+                    setDraft(value);
+                    return;
+                  }
+                  const next = romajiToKanaInput(value);
+                  if (!readingInputAllows(next)) {
+                    pulseShake();
+                    return;
+                  }
+                  setDraft(next);
                 }}
               />
             )}
-            <button ref={goRef} type="submit" className="mm-quiz__go" disabled={busy} aria-label={t("mojimori.study.check")}>
+            <button
+              ref={goRef}
+              type="submit"
+              className="mm-quiz__go"
+              disabled={busy}
+              aria-label={t("mojimori.study.check")}
+            >
               <ChevronRight size={22} />
             </button>
           </div>
@@ -589,7 +793,7 @@ export function MojiMoriReviewSession({
         <div className="mm-quiz__tools">
           <button
             type="button"
-            className={`mm-quiz__tool${wrapUp ? " is-on" : ""}`}
+            className={`mm-quiz__tool${wrapUp ? "is-on" : ""}`}
             onClick={toggleWrap}
           >
             <span>{t("mojimori.study.wrapUp")}</span>
@@ -598,8 +802,10 @@ export function MojiMoriReviewSession({
           </button>
           <button
             type="button"
-            className={`mm-quiz__tool${sheet === "last" ? " is-on" : ""}`}
-            onClick={() => setSheet((open) => (open === "last" ? "none" : "last"))}
+            className={`mm-quiz__tool${sheet === "last" ? "is-on" : ""}`}
+            onClick={() =>
+              setSheet((open) => (open === "last" ? "none" : "last"))
+            }
           >
             <span>{t("mojimori.study.lastAnswers")}</span>
             <Check size={16} />
@@ -607,20 +813,24 @@ export function MojiMoriReviewSession({
           <span className="mm-quiz__tool-wrap">
             <button
               type="button"
-              className={`mm-quiz__tool${sheet === "info" ? " is-on" : ""}${infoAnswered ? "" : " is-locked"}`}
+              className={`mm-quiz__tool ${sheet === "info" ? "is-on" : ""}${infoAnswered ? "" : "is-locked"}`}
               onClick={toggleInfo}
             >
               <span>{t("mojimori.study.itemInfo")}</span>
               <Eye size={16} />
             </button>
             {infoDenied && mode !== "miss" ? (
-              <em className="mm-quiz__tool-note">{t("mojimori.study.infoLocked")}</em>
+              <em className="mm-quiz__tool-note">
+                {t("mojimori.study.infoLocked")}
+              </em>
             ) : null}
           </span>
           <button
             type="button"
-            className={`mm-quiz__tool${sheet === "kana" ? " is-on" : ""}`}
-            onClick={() => setSheet((open) => (open === "kana" ? "none" : "kana"))}
+            className={`mm-quiz__tool${sheet === "kana" ? "is-on" : ""}`}
+            onClick={() =>
+              setSheet((open) => (open === "kana" ? "none" : "kana"))
+            }
           >
             <span>{t("mojimori.study.kanaChart")}</span>
             <b lang="ja">ひ</b>
@@ -631,7 +841,10 @@ export function MojiMoriReviewSession({
             disabled={!audioEnabled}
             title={t("mojimori.playAudio")}
             onClick={() => {
-              const track = pickVoice(tracks, prefs.data?.preferredVoice ?? "random");
+              const track = pickVoice(
+                tracks,
+                prefs.data?.preferredVoice ?? "random",
+              );
               if (track) play(track.url);
             }}
           >
@@ -683,14 +896,13 @@ export function MojiMoriReviewSession({
     <MojiMoriLayout showHeader={false}>
       <div className="mm-quiz-page">
         {feed.isError ? (
-          <section className="glass-panel p-6 text-sm">{feed.error.message}</section>
+          <section className="glass-panel p-6 text-sm">
+            {feed.error.message}
+          </section>
         ) : (
           page
         )}
-        <audio
-          ref={audioRef}
-          onEnded={() => setPlaying(null)}
-        />
+        <audio ref={audioRef} onEnded={() => setPlaying(null)} />
       </div>
     </MojiMoriLayout>
   );
@@ -717,12 +929,18 @@ function LastAnswers({
         if (!card || !record) return null;
         return (
           <li key={id}>
-            <span className="mm-quiz__last-glyph" data-kind={card.objectType} lang="ja">
+            <span
+              className="mm-quiz__last-glyph"
+              data-kind={card.objectType}
+              lang="ja"
+            >
               <Glyph card={card} />
             </span>
             <span className="mm-quiz__last-body">
               {record.meaning ? (
-                <span className={`mm-quiz__last-meanings${record.reading ? " has-reading" : ""}`}>
+                <span
+                  className={`mm-quiz__last-meanings${record.reading ? "has-reading" : ""}`}
+                >
                   <AnswerLine attempt={record.meaning} />
                 </span>
               ) : null}
@@ -733,8 +951,14 @@ function LastAnswers({
               ) : null}
             </span>
             {record.grade ? (
-              <span className={`mm-quiz__last-srs${record.grade.passed ? " is-up" : " is-down"}`}>
-                {record.grade.passed ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+              <span
+                className={`mm-quiz__last-srs${record.grade.passed ? "is-up" : "is-down"}`}
+              >
+                {record.grade.passed ? (
+                  <ChevronUp size={14} />
+                ) : (
+                  <ChevronDown size={14} />
+                )}
                 {t(`mojimori.srs.${stageGroup(record.grade.srsStage)}`)}
               </span>
             ) : null}
@@ -745,9 +969,18 @@ function LastAnswers({
   );
 }
 
-function AnswerLine({ attempt, kana = false }: { attempt: Attempt; kana?: boolean }) {
+function AnswerLine({
+  attempt,
+  kana = false,
+}: {
+  attempt: Attempt;
+  kana?: boolean;
+}) {
   return (
-    <span className={`mm-quiz__answer${attempt.correct ? " is-ok" : " is-bad"}`} lang={kana ? "ja" : undefined}>
+    <span
+      className={`mm-quiz__answer${attempt.correct ? "is-ok" : "is-bad"}`}
+      lang={kana ? "ja" : undefined}
+    >
       <span>{attempt.answer}</span>
       {attempt.correct ? <Check size={14} /> : <X size={14} />}
     </span>
@@ -774,8 +1007,12 @@ function ReviewInfo({
     parts: false,
     found: false,
   });
-  const primary = detail.meanings.find((item) => item.primary)?.meaning ?? detail.primaryMeaning;
-  const alternatives = detail.meanings.filter((item) => item.acceptedAnswer && !item.primary);
+  const primary =
+    detail.meanings.find((item) => item.primary)?.meaning ??
+    detail.primaryMeaning;
+  const alternatives = detail.meanings.filter(
+    (item) => item.acceptedAnswer && !item.primary,
+  );
   const tracks = audioTracks(detail.pronunciationAudios);
   const readings = kanjiReadingsByKind(detail.readings);
   const storyLabel =
@@ -801,13 +1038,23 @@ function ReviewInfo({
           <SubjectTileGrid subjects={detail.related.components} compact />
         </Fold>
       ) : null}
-      <Fold title={t("mojimori.meaning")} open={open.meaning} onToggle={() => toggle("meaning")}>
+      <Fold
+        title={t("mojimori.meaning")}
+        open={open.meaning}
+        onToggle={() => toggle("meaning")}
+      >
         <Fact label={t("mojimori.primary")} value={primary} />
         {alternatives.length > 0 ? (
-          <Fact label={t("mojimori.study.alternative")} value={alternatives.map((item) => item.meaning).join(", ")} />
+          <Fact
+            label={t("mojimori.study.alternative")}
+            value={alternatives.map((item) => item.meaning).join(", ")}
+          />
         ) : null}
         {detail.partsOfSpeech.length > 0 ? (
-          <Fact label={t("mojimori.wordType")} value={detail.partsOfSpeech.join(", ")} />
+          <Fact
+            label={t("mojimori.wordType")}
+            value={detail.partsOfSpeech.join(", ")}
+          />
         ) : null}
         <h3>{storyLabel}</h3>
         <MnemonicText text={detail.meaningMnemonic} />
@@ -816,7 +1063,11 @@ function ReviewInfo({
       </Fold>
       {detail.objectType !== "radical" ? (
         <Fold
-          title={detail.objectType === "kanji" ? t("mojimori.readings") : t("mojimori.study.readingTitle")}
+          title={
+            detail.objectType === "kanji"
+              ? t("mojimori.readings")
+              : t("mojimori.study.readingTitle")
+          }
           open={open.reading}
           onToggle={() => toggle("reading")}
         >
@@ -839,18 +1090,29 @@ function ReviewInfo({
               />
             </div>
           ) : (
-            <VocabReadings detail={detail} tracks={tracks} playing={playing} onPlay={onPlay} />
+            <VocabReadings
+              detail={detail}
+              tracks={tracks}
+              playing={playing}
+              onPlay={onPlay}
+            />
           )}
           {detail.objectType === "kanji" && tracks.length > 0 ? (
             <ul className="mm-quiz__voices">
               {tracks.map((track) => (
                 <li key={track.url}>
-                  <button type="button" onClick={() => onPlay(track.url)} aria-pressed={playing === track.url}>
+                  <button
+                    type="button"
+                    onClick={() => onPlay(track.url)}
+                    aria-pressed={playing === track.url}
+                  >
                     <Volume2 size={16} />
                   </button>
                   <span>
                     <strong>{track.name}</strong>
-                    {track.description ? <small>{track.description}</small> : null}
+                    {track.description ? (
+                      <small>{track.description}</small>
+                    ) : null}
                   </span>
                 </li>
               ))}
@@ -862,8 +1124,13 @@ function ReviewInfo({
           <NoteBox detail={detail} field="reading" />
         </Fold>
       ) : null}
-      {detail.objectType === "vocabulary" && detail.contextSentences.length > 0 ? (
-        <Fold title={t("mojimori.context")} open={open.context} onToggle={() => toggle("context")}>
+      {detail.objectType === "vocabulary" &&
+      detail.contextSentences.length > 0 ? (
+        <Fold
+          title={t("mojimori.context")}
+          open={open.context}
+          onToggle={() => toggle("context")}
+        >
           <h3>{t("mojimori.study.contextSentences")}</h3>
           <div className="mm-quiz__sentences">
             {detail.contextSentences.map((sentence, index) => (
@@ -875,14 +1142,21 @@ function ReviewInfo({
           </div>
         </Fold>
       ) : null}
-      {detail.objectType === "vocabulary" && detail.related.components.length > 0 ? (
-        <Fold title={t("mojimori.kanjiComposition")} open={open.parts} onToggle={() => toggle("parts")}>
+      {detail.objectType === "vocabulary" &&
+      detail.related.components.length > 0 ? (
+        <Fold
+          title={t("mojimori.kanjiComposition")}
+          open={open.parts}
+          onToggle={() => toggle("parts")}
+        >
           <div className="mm-compose">
             {detail.related.components.map((subject) => (
               <div key={subject.id} className="mm-compose__item">
                 <SubjectTile subject={subject} compact />
                 <span className="mm-compose__meta">
-                  {subject.primaryReading ? <b lang="ja">{subject.primaryReading}</b> : null}
+                  {subject.primaryReading ? (
+                    <b lang="ja">{subject.primaryReading}</b>
+                  ) : null}
                   <small>{subject.primaryMeaning}</small>
                 </span>
               </div>
@@ -890,8 +1164,13 @@ function ReviewInfo({
           </div>
         </Fold>
       ) : null}
-      {detail.objectType === "kanji" && detail.related.amalgamations.length > 0 ? (
-        <Fold title={t("mojimori.foundInVocabulary")} open={open.found} onToggle={() => toggle("found")}>
+      {detail.objectType === "kanji" &&
+      detail.related.amalgamations.length > 0 ? (
+        <Fold
+          title={t("mojimori.foundInVocabulary")}
+          open={open.found}
+          onToggle={() => toggle("found")}
+        >
           <SubjectTileGrid subjects={detail.related.amalgamations} compact />
         </Fold>
       ) : null}
@@ -911,12 +1190,16 @@ function VocabReadings({
   onPlay: (url: string) => void;
 }) {
   const accepted = detail.readings.filter((item) => item.acceptedAnswer);
-  const readings = accepted.length > 0 ? accepted : [{ reading: detail.primaryReading }];
+  const readings =
+    accepted.length > 0 ? accepted : [{ reading: detail.primaryReading }];
   return (
     <div className="mm-vocab-readings">
       {readings.map((item) => {
-        const matched = tracks.filter((track) => track.pronunciation === item.reading);
-        const voices = matched.length > 0 || readings.length > 1 ? matched : tracks;
+        const matched = tracks.filter(
+          (track) => track.pronunciation === item.reading,
+        );
+        const voices =
+          matched.length > 0 || readings.length > 1 ? matched : tracks;
         return (
           <div key={item.reading} className="mm-vocab-reading">
             <p lang="ja">{item.reading}</p>
@@ -924,12 +1207,18 @@ function VocabReadings({
               <ul className="mm-quiz__voices">
                 {voices.map((track) => (
                   <li key={track.url}>
-                    <button type="button" onClick={() => onPlay(track.url)} aria-pressed={playing === track.url}>
+                    <button
+                      type="button"
+                      onClick={() => onPlay(track.url)}
+                      aria-pressed={playing === track.url}
+                    >
                       <Volume2 size={16} />
                     </button>
                     <span>
                       <strong>{track.name}</strong>
-                      {track.description ? <small>{track.description}</small> : null}
+                      {track.description ? (
+                        <small>{track.description}</small>
+                      ) : null}
                     </span>
                   </li>
                 ))}
@@ -942,9 +1231,17 @@ function VocabReadings({
   );
 }
 
-function ReadingGroup({ title, value, taught }: { title: string; value: string; taught: boolean }) {
+function ReadingGroup({
+  title,
+  value,
+  taught,
+}: {
+  title: string;
+  value: string;
+  taught: boolean;
+}) {
   return (
-    <div className={`mm-reading${taught ? " is-taught" : ""}`}>
+    <div className={`mm-reading${taught ? "is-taught" : ""}`}>
       <span>{title}</span>
       <strong lang="ja">{value}</strong>
     </div>
@@ -983,8 +1280,13 @@ function Fold({
   children: React.ReactNode;
 }) {
   return (
-    <section className={`mm-fold${open ? " is-open" : ""}`}>
-      <button type="button" className="mm-fold__toggle" aria-expanded={open} onClick={onToggle}>
+    <section className={`mm-fold${open ? "is-open" : ""}`}>
+      <button
+        type="button"
+        className="mm-fold__toggle"
+        aria-expanded={open}
+        onClick={onToggle}
+      >
         <span>{title}</span>
         <ChevronRight size={16} />
       </button>
@@ -1010,10 +1312,21 @@ function NoteBox({
   useEffect(() => setValue(current), [current]);
   return (
     <div className="mm-quiz__note">
-      <h3>{t(field === "meaning" ? "mojimori.study.meaningNote" : "mojimori.study.readingNote")}</h3>
+      <h3>
+        {t(
+          field === "meaning"
+            ? "mojimori.study.meaningNote"
+            : "mojimori.study.readingNote",
+        )}
+      </h3>
       {editing ? (
         <>
-          <textarea className="moji-field" rows={3} value={value} onChange={(event) => setValue(event.target.value)} />
+          <textarea
+            className="moji-field"
+            rows={3}
+            value={value}
+            onChange={(event) => setValue(event.target.value)}
+          />
           <button
             type="button"
             className="moji-btn"
@@ -1022,7 +1335,11 @@ function NoteBox({
               const nextMeaning = field === "meaning" ? value : meaningNote;
               const nextReading = field === "reading" ? value : readingNote;
               save.mutate(
-                { id: detail.id, meaningNote: nextMeaning, readingNote: nextReading },
+                {
+                  id: detail.id,
+                  meaningNote: nextMeaning,
+                  readingNote: nextReading,
+                },
                 { onSuccess: () => setEditing(false) },
               );
             }}
@@ -1031,11 +1348,19 @@ function NoteBox({
           </button>
         </>
       ) : current ? (
-        <button type="button" className="mm-quiz__note-text" onClick={() => setEditing(true)}>
+        <button
+          type="button"
+          className="mm-quiz__note-text"
+          onClick={() => setEditing(true)}
+        >
           {current}
         </button>
       ) : (
-        <button type="button" className="moji-btn" onClick={() => setEditing(true)}>
+        <button
+          type="button"
+          className="moji-btn"
+          onClick={() => setEditing(true)}
+        >
           {t("mojimori.study.addNote")}
         </button>
       )}
@@ -1077,7 +1402,11 @@ function KanaPad({
       <div className="mm-kana__grid">
         {page.cells.map((cell, index) =>
           cell ? (
-            <button key={cell[0]} type="button" onClick={() => onInsert(cell[0])}>
+            <button
+              key={cell[0]}
+              type="button"
+              onClick={() => onInsert(cell[0])}
+            >
               <span lang="ja">{cell[0]}</span>
               <small>{cell[1]}</small>
             </button>

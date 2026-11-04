@@ -11,7 +11,12 @@ import {
 } from "lucide-react";
 import { MojiMoriLoading } from "./MojiMoriLoading";
 import { useTranslation } from "../../i18n/I18nProvider";
-import { romajiToKanaInput } from "../../lib/japaneseInput";
+import {
+  blocksReadingLatin,
+  readingAnswerIncomplete,
+  readingInputAllows,
+  romajiToKanaInput,
+} from "../../lib/japaneseInput";
 import {
   kanjiReadingsByKind,
   pickCharacterImage,
@@ -252,6 +257,13 @@ export function MojiMoriLessonSession({ ids }: { ids?: number[] }) {
     const subject = order?.find((item) => item.id === current?.id);
     if (!current || !subject || check.isPending || grade.isPending) return;
     const answer = current.prompt === "reading" ? romajiToKanaInput(draft) : draft.trim();
+    if (current.prompt === "reading" && readingAnswerIncomplete(answer)) {
+      setDraft(answer);
+      setShaking(false);
+      requestAnimationFrame(() => setShaking(true));
+      holdCaret(inputRef.current);
+      return;
+    }
     if (current.prompt === "reading") setDraft(answer);
     const result = await check.mutateAsync({
       subjectId: current.id,
@@ -529,9 +541,42 @@ export function MojiMoriLessonSession({ ids }: { ids?: number[] }) {
                   autoComplete="off"
                   spellCheck={false}
                   readOnly={pending === "ok"}
+                  onKeyDown={(event) => {
+                    if (task.prompt !== "reading") return;
+                    if (
+                      event.ctrlKey ||
+                      event.metaKey ||
+                      event.altKey ||
+                      event.nativeEvent.isComposing
+                    )
+                      return;
+                    const el = event.currentTarget;
+                    if (
+                      blocksReadingLatin(
+                        draft,
+                        event.key,
+                        el.selectionStart ?? draft.length,
+                        el.selectionEnd ?? draft.length,
+                      )
+                    ) {
+                      event.preventDefault();
+                      setShaking(false);
+                      requestAnimationFrame(() => setShaking(true));
+                    }
+                  }}
                   onChange={(event) => {
                     const value = event.target.value;
-                    setDraft(task.prompt === "reading" ? romajiToKanaInput(value) : value);
+                    if (task.prompt !== "reading") {
+                      setDraft(value);
+                      return;
+                    }
+                    const next = romajiToKanaInput(value);
+                    if (!readingInputAllows(next)) {
+                      setShaking(false);
+                      requestAnimationFrame(() => setShaking(true));
+                      return;
+                    }
+                    setDraft(next);
                   }}
                 />
               )}

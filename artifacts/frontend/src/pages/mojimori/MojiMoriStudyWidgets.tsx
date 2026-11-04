@@ -36,8 +36,7 @@ export function MojiMoriStudyWidgets({ study }: { study: MojiMoriStudySnapshot }
         </div>
       </section>
 
-      <ForecastPanel forecast={study.forecast} />
-
+      
       <section className="glass-panel p-5">
         <h2 className="mb-3 text-lg sm:text-base font-semibold">{t("mojimori.study.extraTitle")}</h2>
         <div className="flex flex-wrap gap-2">
@@ -62,6 +61,8 @@ export function MojiMoriStudyWidgets({ study }: { study: MojiMoriStudySnapshot }
           </div>
         ) : null}
       </section>
+
+      <ForecastPanel forecast={study.forecast} />
 
       <ReviewStats study={study} />
 
