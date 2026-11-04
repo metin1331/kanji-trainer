@@ -2194,21 +2194,21 @@ button.forecast-row {
 
 .mm-quiz__meter {
   height: 6px;
-  background: rgba(255, 255, 255, 0.45);
+  background: var(--color-ink);
 }
 
 .mm-quiz__meter span {
   display: block;
   height: 100%;
-  background: var(--color-text-black-secondary);
+  background: #f4f7fb;
   transition: width 0.35s ease;
 }
 
 .mm-quiz[data-kind="radical"] .mm-quiz__meter span {
-  background: var(--color-text-black-secondary);
+  background: #f4f7fb;
 }
 .mm-quiz[data-kind="kanji"] .mm-quiz__meter span {
-  background: var(--color-text-black-secondary);
+  background: #f4f7fb;
 }
 
 .mm-quiz__stage {
