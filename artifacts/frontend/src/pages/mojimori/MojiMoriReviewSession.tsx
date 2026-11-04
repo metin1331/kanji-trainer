@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { motion } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
 import {
   ArrowBigUpDash,
   ArrowBigDownDash,
@@ -832,22 +832,25 @@ export function MojiMoriReviewSession({
             <Glyph card={card} />
           </div>
           <div className="mm-quiz__stage-footer">
-            {showSrs && srsFlash ? (
-              <motion.span
-                key={`${srsFlash.up ? "up" : "down"}-${srsFlash.stage}`}
-                className={`mm-quiz__srs${srsFlash.up ? "is-up" : "is-down"}`}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
-              >
-                {srsFlash.up ? (
-                  <ArrowBigUpDash size={16} />
-                ) : (
-                  <ArrowBigDownDash size={16} />
-                )}
-                {t(`mojimori.srs.${stageGroup(srsFlash.stage)}`)}
-              </motion.span>
-            ) : null}
+            <AnimatePresence>
+              {showSrs && srsFlash ? (
+                <motion.span
+                  key={`${srsFlash.up ? "up" : "down"}-${srsFlash.stage}`}
+                  className={`mm-quiz__srs ${srsFlash.up ? "is-up" : "is-down"}`}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
+                >
+                  {srsFlash.up ? (
+                    <ArrowBigUpDash size={16} />
+                  ) : (
+                    <ArrowBigDownDash size={16} />
+                  )}
+                  {t(`mojimori.srs.${stageGroup(srsFlash.stage)}`)}
+                </motion.span>
+              ) : null}
+            </AnimatePresence>
           </div>
         </header>
 
