@@ -22,6 +22,7 @@ export type AuxiliaryLike = {
 export type GradeResult = {
   meaningCorrect: boolean | null;
   readingCorrect: boolean | null;
+  wordCorrect: boolean | null;
   shake: boolean;
   wantedType: string | null;
   passed: boolean;
@@ -333,7 +334,98 @@ export function gradeAnswers(
     (readingCorrect !== false) &&
     (meaningCorrect === true || readingCorrect === true);
 
-  return { meaningCorrect, readingCorrect, shake, wantedType, passed };
+  return { meaningCorrect, readingCorrect, wordCorrect: null, shake, wantedType, passed };
+}
+
+export type WordComponent = {
+  objectType: string;
+  characters: string | null;
+};
+
+export function compositionKanji(
+  componentSubjectIds: number[],
+  lookup: (id: number) => WordComponent | undefined,
+): string[] {
+  const kanji: string[] = [];
+  for (const id of componentSubjectIds) {
+    const part = lookup(id);
+    if (part?.objectType === "kanji" && part.characters) kanji.push(part.characters);
+  }
+  return kanji;
+}
+
+export type WordPeer = {
+  meanings: MeaningLike[];
+  auxiliary: AuxiliaryLike[];
+  kanji: string;
+  characters: string | null;
+};
+
+function exactAcceptedMeaning(
+  answer: string,
+  meanings: MeaningLike[],
+  auxiliary: AuxiliaryLike[],
+): boolean {
+  const input = normalizeMeaning(answer);
+  if (!input) return false;
+  const accepted = [
+    ...meanings.filter((item) => item.acceptedAnswer).map((item) => normalizeMeaning(item.meaning)),
+    ...auxiliary
+      .filter((item) => item.type === "whitelist")
+      .map((item) => normalizeMeaning(item.meaning)),
+  ];
+  return accepted.includes(input);
+}
+
+export function assessWordAnswer(input: {
+  method: "meaning" | "kanji";
+  answer: string;
+  meanings: MeaningLike[];
+  auxiliary: AuxiliaryLike[];
+  kanji: string;
+  characters: string | null;
+  peers: WordPeer[];
+}): { correct: boolean; homophone: boolean; lenient: boolean } {
+  if (input.method === "kanji") {
+    const drawn = input.answer.replace(/\s+/g, "");
+    if (!drawn) return { correct: false, homophone: false, lenient: false };
+    if (drawn === input.kanji) return { correct: true, homophone: false, lenient: false };
+    const homophone = input.peers.some((peer) => {
+      const spelling = peer.kanji.replace(/\s+/g, "");
+      return spelling.length > 0 && spelling === drawn && spelling !== input.kanji;
+    });
+    return { correct: false, homophone, lenient: false };
+  }
+
+  const verdict = matchMeaning(input.answer, input.meanings, input.auxiliary);
+  if (verdict.correct) return { correct: true, homophone: false, lenient: verdict.lenient };
+  const homophone = input.peers.some((peer) => {
+    const sameSpelling =
+      (peer.characters ?? "") === (input.characters ?? "") && peer.kanji === input.kanji;
+    if (sameSpelling) return false;
+    return exactAcceptedMeaning(input.answer, peer.meanings, peer.auxiliary);
+  });
+  return { correct: false, homophone, lenient: false };
+}
+
+export function wordAnswerCorrect(
+  answer: string | undefined,
+  meanings: MeaningLike[],
+  auxiliary: AuxiliaryLike[],
+  kanji: string,
+): boolean {
+  const text = (answer ?? "").trim();
+  if (!text || !kanji) return false;
+  if (text.replace(/\s+/g, "") === kanji) return true;
+  return matchMeaning(text, meanings, auxiliary).correct;
+}
+
+export function applyWordGrade(graded: GradeResult, wordCorrect: boolean | null): GradeResult {
+  return {
+    ...graded,
+    wordCorrect,
+    passed: graded.passed && wordCorrect !== false,
+  };
 }
 
 export function kanjiNeededToPass(kanjiCount: number): number {

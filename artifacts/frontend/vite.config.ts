@@ -76,6 +76,7 @@ export default defineConfig(async ({ mode }) => {
     resolve: {
       alias: {
         "@": path.resolve(frontendDir, "src"),
+        "@moji-grade": path.resolve(repoRoot, "artifacts/backend/src/lib/mojiMoriSrs.ts"),
         "@assets": path.resolve(repoRoot, "attached_assets"),
         path: "path-browserify",
       },

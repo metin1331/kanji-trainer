@@ -7,13 +7,19 @@ import {
 } from "@workspace/db";
 import { and, asc, desc, eq, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import {
+  applyWordGrade,
+  assessWordAnswer,
   availableAfter,
+  checkPrompt,
+  compositionKanji,
   gradeAnswers,
   nextStageOnCorrect,
   nextStageOnWrong,
-  checkPrompt,
+  normalizeReading,
   promptsFor,
+  wordAnswerCorrect,
   type GradeResult,
+  type WordPeer,
 } from "./mojiMoriSrs";
 import { COMPLETED_STAGE, UNLOCK_THRESHOLD } from "./mojiMoriUnlock";
 import {
@@ -255,10 +261,11 @@ function lessonCard(row: SubjectRow) {
     readingHint: row.readingHint,
     contextSentences: row.contextSentences,
     prompts: promptsFor(row.objectType),
+    gradeKey: gradeKeyFor(row, [], [], []),
   };
 }
 
-function quizCard(row: {
+type QuizSource = {
   id: number;
   objectType: string;
   level: number;
@@ -266,7 +273,16 @@ function quizCard(row: {
   characterImages: SubjectRow["characterImages"];
   pronunciationAudios?: SubjectRow["pronunciationAudios"];
   srsStage: number;
-}) {
+  componentSubjectIds?: number[];
+  meanings?: SubjectRow["meanings"];
+  readings?: SubjectRow["readings"];
+  auxiliaryMeanings?: SubjectRow["auxiliaryMeanings"];
+  incorrectCount?: number;
+};
+
+function quizCard(row: QuizSource, wordKanji: string[]) {
+  const prompts = promptsFor(row.objectType);
+  const withWord = row.objectType === "vocabulary" && wordKanji.length > 0;
   return {
     id: row.id,
     objectType: row.objectType,
@@ -275,8 +291,94 @@ function quizCard(row: {
     characterImages: row.characterImages,
     pronunciationAudios: row.pronunciationAudios ?? [],
     srsStage: row.srsStage,
-    prompts: promptsFor(row.objectType),
+    prompts: withWord ? [...prompts, "word" as const] : prompts,
+    wordKanji: withWord ? wordKanji : [],
+    wordReading: withWord ? primaryReading(row.readings ?? []) : "",
+    wordMeaning: withWord ? primaryMeaning(row.meanings ?? []) : "",
+    gradeKey: gradeKeyFor(row, withWord ? wordKanji : [], [], []),
   };
+}
+
+function gradeKeyFor(
+  row: {
+    characters: string | null;
+    meanings?: SubjectRow["meanings"];
+    readings?: SubjectRow["readings"];
+    auxiliaryMeanings?: SubjectRow["auxiliaryMeanings"];
+    incorrectCount?: number;
+  },
+  wordKanji: string[],
+  componentReadings: SubjectRow["readings"],
+  peers: WordPeer[],
+) {
+  return {
+    meanings: row.meanings ?? [],
+    readings: row.readings ?? [],
+    auxiliaryMeanings: row.auxiliaryMeanings ?? [],
+    componentReadings,
+    wordKanji,
+    characters: row.characters,
+    peers,
+    incorrectCount: row.incorrectCount ?? 0,
+  };
+}
+
+async function componentLookup(ids: number[]) {
+  const unique = [...new Set(ids)];
+  if (unique.length === 0) {
+    return new Map<number, { objectType: string; characters: string | null; readings: SubjectRow["readings"] }>();
+  }
+  const rows = await db
+    .select({
+      id: mojiMoriSubjectsTable.id,
+      objectType: mojiMoriSubjectsTable.objectType,
+      characters: mojiMoriSubjectsTable.characters,
+      readings: mojiMoriSubjectsTable.readings,
+    })
+    .from(mojiMoriSubjectsTable)
+    .where(inArray(mojiMoriSubjectsTable.id, unique));
+  return new Map(rows.map((row) => [row.id, row]));
+}
+
+function componentKanjiReadings(
+  ids: number[],
+  lookup: Awaited<ReturnType<typeof componentLookup>>,
+): SubjectRow["readings"] {
+  const readings: SubjectRow["readings"] = [];
+  for (const id of ids) {
+    const part = lookup.get(id);
+    if (part?.objectType === "kanji") readings.push(...part.readings);
+  }
+  return readings;
+}
+
+async function quizCards(rows: QuizSource[]) {
+  const lookup = await componentLookup(rows.flatMap((row) => row.componentSubjectIds ?? []));
+  const peers = await peersBySubject(
+    rows.flatMap((row) =>
+      row.objectType === "vocabulary" && row.readings
+        ? [
+            {
+              id: row.id,
+              characters: row.characters,
+              meanings: row.meanings ?? [],
+              auxiliaryMeanings: row.auxiliaryMeanings ?? [],
+              readings: row.readings,
+              componentSubjectIds: row.componentSubjectIds ?? [],
+            },
+          ]
+        : [],
+    ),
+  );
+  return rows.map((row) => {
+    const ids = row.componentSubjectIds ?? [];
+    const wordKanji = compositionKanji(ids, (id) => lookup.get(id));
+    const card = quizCard(row, wordKanji);
+    return {
+      ...card,
+      gradeKey: gradeKeyFor(row, card.wordKanji, componentKanjiReadings(ids, lookup), peers.get(row.id) ?? []),
+    };
+  });
 }
 
 export async function checkStudyAnswer(
@@ -313,6 +415,131 @@ export async function checkStudyAnswer(
     componentReadings,
     subject.auxiliaryMeanings,
   );
+}
+
+function acceptedReadingKeys(readings: SubjectRow["readings"]): string[] {
+  return [
+    ...new Set(
+      readings
+        .filter((item) => item.acceptedAnswer)
+        .map((item) => normalizeReading(item.reading))
+        .filter(Boolean),
+    ),
+  ];
+}
+
+type PeerSource = {
+  id: number;
+  characters: string | null;
+  meanings: SubjectRow["meanings"];
+  auxiliaryMeanings: SubjectRow["auxiliaryMeanings"];
+  readings: SubjectRow["readings"];
+  componentSubjectIds: number[];
+};
+
+async function peersBySubject(subjects: PeerSource[]): Promise<Map<number, WordPeer[]>> {
+  const wanted = new Map<number, string[]>();
+  const keys = new Set<string>();
+  for (const subject of subjects) {
+    const list = acceptedReadingKeys(subject.readings);
+    wanted.set(subject.id, list);
+    for (const key of list) keys.add(key);
+  }
+  const keyList = [...keys];
+  const found = new Map<number, PeerSource>();
+  for (let index = 0; index < keyList.length; index += 25) {
+    const chunk = keyList.slice(index, index + 25);
+    const filters = chunk.map(
+      (key) =>
+        sql`${mojiMoriSubjectsTable.readings}::text ilike ${"%" + key.replace(/[%_\\]/g, "") + "%"}`,
+    );
+    const rows = await db
+      .select({
+        id: mojiMoriSubjectsTable.id,
+        characters: mojiMoriSubjectsTable.characters,
+        meanings: mojiMoriSubjectsTable.meanings,
+        auxiliaryMeanings: mojiMoriSubjectsTable.auxiliaryMeanings,
+        readings: mojiMoriSubjectsTable.readings,
+        componentSubjectIds: mojiMoriSubjectsTable.componentSubjectIds,
+      })
+      .from(mojiMoriSubjectsTable)
+      .where(
+        and(
+          eq(mojiMoriSubjectsTable.objectType, "vocabulary"),
+          filters.length === 1 ? filters[0]! : or(...filters),
+        ),
+      );
+    for (const row of rows) found.set(row.id, row);
+  }
+  const lookup = await componentLookup([...found.values()].flatMap((row) => row.componentSubjectIds));
+  const prepared = [...found.values()].map((row) => ({
+    id: row.id,
+    keys: acceptedReadingKeys(row.readings),
+    peer: {
+      meanings: row.meanings,
+      auxiliary: row.auxiliaryMeanings,
+      kanji: compositionKanji(row.componentSubjectIds, (id) => lookup.get(id)).join(""),
+      characters: row.characters,
+    } satisfies WordPeer,
+  }));
+  const result = new Map<number, WordPeer[]>();
+  for (const subject of subjects) {
+    const mine = new Set(wanted.get(subject.id) ?? []);
+    result.set(
+      subject.id,
+      prepared.flatMap((row) =>
+        row.id !== subject.id && row.keys.some((key) => mine.has(key)) ? [row.peer] : [],
+      ),
+    );
+  }
+  return result;
+}
+
+async function readingPeers(subject: SubjectRow): Promise<WordPeer[]> {
+  const map = await peersBySubject([subject]);
+  return map.get(subject.id) ?? [];
+}
+
+export async function checkWordAnswer(
+  subjectId: number,
+  method: "meaning" | "kanji",
+  answer: string,
+) {
+  const [subject] = await db
+    .select()
+    .from(mojiMoriSubjectsTable)
+    .where(eq(mojiMoriSubjectsTable.id, subjectId))
+    .limit(1);
+  if (!subject) throw new Error("Not found");
+  const empty = {
+    correct: false,
+    homophone: false,
+    shake: false,
+    wantedType: null,
+    multipleMeanings: false,
+    multipleReadings: false,
+    lenient: false,
+    exception: null,
+  };
+  if (subject.objectType !== "vocabulary") return empty;
+  const lookup = await componentLookup(subject.componentSubjectIds);
+  const kanji = compositionKanji(subject.componentSubjectIds, (id) => lookup.get(id)).join("");
+  if (!kanji) return empty;
+  const verdict = assessWordAnswer({
+    method,
+    answer,
+    meanings: subject.meanings,
+    auxiliary: subject.auxiliaryMeanings,
+    kanji,
+    characters: subject.characters,
+    peers: await readingPeers(subject),
+  });
+  return {
+    ...empty,
+    correct: verdict.correct,
+    homophone: verdict.homophone && !verdict.correct,
+    lenient: verdict.lenient,
+  };
 }
 
 function primaryMeaning(meanings: SubjectRow["meanings"]): string {
@@ -401,14 +628,24 @@ export async function lessonQueue(userId: number, selectedIds?: number[]) {
     ? await db.select().from(mojiMoriSubjectsTable).where(inArray(mojiMoriSubjectsTable.id, ids))
     : [];
   const byId = new Map(rows.map((row) => [row.id, row]));
+  const chosenRows = ids.flatMap((id) => {
+    const row = byId.get(id);
+    return row ? [row] : [];
+  });
+  const lookup = await componentLookup(chosenRows.flatMap((row) => row.componentSubjectIds));
   return {
     available: candidates.length,
     dailyRemaining: Number.isFinite(remaining) ? remaining : null,
     batchSize: settings.lessonBatchSize,
-    items: ids.flatMap((id) => {
-      const row = byId.get(id);
-      return row ? [lessonCard(row)] : [];
-    }),
+    items: chosenRows.map((row) => ({
+      ...lessonCard(row),
+      gradeKey: gradeKeyFor(
+        row,
+        [],
+        componentKanjiReadings(row.componentSubjectIds, lookup),
+        [],
+      ),
+    })),
   };
 }
 
@@ -433,6 +670,11 @@ export async function reviewQueue(userId: number) {
       characterImages: mojiMoriSubjectsTable.characterImages,
       pronunciationAudios: mojiMoriSubjectsTable.pronunciationAudios,
       srsStage: mojiMoriProgressTable.srsStage,
+      incorrectCount: mojiMoriProgressTable.incorrectCount,
+      componentSubjectIds: mojiMoriSubjectsTable.componentSubjectIds,
+      meanings: mojiMoriSubjectsTable.meanings,
+      readings: mojiMoriSubjectsTable.readings,
+      auxiliaryMeanings: mojiMoriSubjectsTable.auxiliaryMeanings,
     })
     .from(mojiMoriProgressTable)
     .innerJoin(
@@ -460,7 +702,7 @@ export async function reviewQueue(userId: number) {
   return {
     due: rows.length,
     apprenticeDue: rows.filter((row) => row.srsStage <= 4).length,
-    items: ordered.map(quizCard),
+    items: await quizCards(ordered),
   };
 }
 
@@ -472,12 +714,14 @@ export async function extraQueue(userId: number, mode: ExtraMode) {
     const rows = await db.select().from(mojiMoriSubjectsTable).where(inArray(mojiMoriSubjectsTable.id, ids));
     const progress = await progressBySubjectId(userId, ids);
     const byId = new Map(rows.map((row) => [row.id, row]));
-    return {
-      items: ids.flatMap((id) => {
-        const row = byId.get(id);
-        return row ? [quizCard({ ...row, srsStage: progress.get(id)?.srsStage ?? 0 })] : [];
-      }),
-    };
+    const sources = ids.flatMap((id) => {
+      const row = byId.get(id);
+      const saved = progress.get(id);
+      return row
+        ? [{ ...row, srsStage: saved?.srsStage ?? 0, incorrectCount: saved?.incorrectCount ?? 0 }]
+        : [];
+    });
+    return { items: await quizCards(sources) };
   }
   const stageFilter =
     mode === "cooked"
@@ -492,12 +736,17 @@ export async function extraQueue(userId: number, mode: ExtraMode) {
       characterImages: mojiMoriSubjectsTable.characterImages,
       pronunciationAudios: mojiMoriSubjectsTable.pronunciationAudios,
       srsStage: mojiMoriProgressTable.srsStage,
+      incorrectCount: mojiMoriProgressTable.incorrectCount,
+      componentSubjectIds: mojiMoriSubjectsTable.componentSubjectIds,
+      meanings: mojiMoriSubjectsTable.meanings,
+      readings: mojiMoriSubjectsTable.readings,
+      auxiliaryMeanings: mojiMoriSubjectsTable.auxiliaryMeanings,
     })
     .from(mojiMoriProgressTable)
     .innerJoin(mojiMoriSubjectsTable, eq(mojiMoriProgressTable.subjectId, mojiMoriSubjectsTable.id))
     .where(and(eq(mojiMoriProgressTable.userId, userId), stageFilter))
     .orderBy(desc(mojiMoriProgressTable.startedAt));
-  return { items: rows.map(quizCard) };
+  return { items: await quizCards(rows) };
 }
 
 async function writeAttempts(
@@ -521,6 +770,17 @@ async function writeAttempts(
       toStage,
     });
     await bumpAnswerStat(userId, subjectId, prompt, correct);
+  }
+  if (graded.wordCorrect !== null) {
+    await db.insert(mojiMoriReviewsTable).values({
+      userId,
+      subjectId,
+      kind,
+      prompt: "word",
+      correct: graded.wordCorrect,
+      fromStage,
+      toStage,
+    });
   }
 }
 
@@ -568,6 +828,8 @@ export async function gradeStudyItem(
   subjectId: number,
   meaning: string | undefined,
   reading: string | undefined,
+  word?: string,
+  expectedStage?: number,
 ): Promise<GradeResult & { srsStage: number; level: number; leveledUp: boolean }> {
   const [subject] = await db
     .select()
@@ -577,6 +839,20 @@ export async function gradeStudyItem(
   if (!subject) throw new Error("Not found");
   const row = (await progressBySubjectId(userId, [subjectId])).get(subjectId);
   const fromStage = row?.srsStage ?? 0;
+  const levelBefore = await ensureMojiMoriUser(userId);
+  const unchanged = {
+    meaningCorrect: null,
+    readingCorrect: null,
+    wordCorrect: null,
+    shake: false,
+    wantedType: null,
+    passed: false,
+    srsStage: fromStage,
+    level: levelBefore,
+    leveledUp: false,
+  };
+  if (kind === "lesson" && fromStage >= 1) return unchanged;
+  if (kind === "review" && expectedStage != null && fromStage !== expectedStage) return unchanged;
   const graded = gradeAnswers(
     subject.objectType,
     subject.meanings,
@@ -585,23 +861,32 @@ export async function gradeStudyItem(
     reading,
     subject.auxiliaryMeanings,
   );
-  const levelBefore = await ensureMojiMoriUser(userId);
 
   if (graded.shake) {
     return { ...graded, srsStage: fromStage, level: levelBefore, leveledUp: false };
   }
 
+  let wordCorrect: boolean | null = null;
+  if (kind !== "lesson" && subject.objectType === "vocabulary") {
+    const lookup = await componentLookup(subject.componentSubjectIds);
+    const kanji = compositionKanji(subject.componentSubjectIds, (id) => lookup.get(id)).join("");
+    if (kanji) {
+      wordCorrect = wordAnswerCorrect(word, subject.meanings, subject.auxiliaryMeanings, kanji);
+    }
+  }
+  const scored = applyWordGrade(graded, wordCorrect);
+
   if (kind === "extra") {
-    await writeAttempts(userId, subjectId, "extra", subject.objectType, graded, fromStage, fromStage);
-    return { ...graded, srsStage: fromStage, level: levelBefore, leveledUp: false };
+    await writeAttempts(userId, subjectId, "extra", subject.objectType, scored, fromStage, fromStage);
+    return { ...scored, srsStage: fromStage, level: levelBefore, leveledUp: false };
   }
 
   if (kind === "lesson") {
     const allowed = await lessonCandidates(userId, levelBefore);
     if (!allowed.some((item) => item.id === subjectId)) throw new Error("Item is not in lessons");
-    if (!graded.passed) {
-      await writeAttempts(userId, subjectId, "lesson", subject.objectType, graded, 0, 0);
-      return { ...graded, srsStage: 0, level: levelBefore, leveledUp: false };
+    if (!scored.passed) {
+      await writeAttempts(userId, subjectId, "lesson", subject.objectType, scored, 0, 0);
+      return { ...scored, srsStage: 0, level: levelBefore, leveledUp: false };
     }
     const settings = await studySettings(userId);
     const done = await lessonsDoneToday(userId);
@@ -609,23 +894,57 @@ export async function gradeStudyItem(
       throw new Error("Daily lesson limit reached");
     }
     await applyStage(userId, subjectId, 1, 0, levelBefore, row?.unlockedAt ?? new Date());
-    await writeAttempts(userId, subjectId, "lesson", subject.objectType, graded, 0, 1);
+    await writeAttempts(userId, subjectId, "lesson", subject.objectType, scored, 0, 1);
     const moved = await maybeLevelUp(userId);
-    return { ...graded, srsStage: 1, level: moved.level, leveledUp: moved.leveledUp };
+    return { ...scored, srsStage: 1, level: moved.level, leveledUp: moved.leveledUp };
   }
 
   if (fromStage < 1 || fromStage >= COMPLETED_STAGE) throw new Error("Item is not in reviews");
-  if (!graded.passed) {
+  if (!scored.passed) {
     const dropped = nextStageOnWrong(fromStage, row?.incorrectCount ?? 0);
     await applyStage(userId, subjectId, dropped.stage, dropped.incorrectCount, levelBefore, row?.unlockedAt ?? new Date());
-    await writeAttempts(userId, subjectId, "review", subject.objectType, graded, fromStage, dropped.stage);
-    return { ...graded, srsStage: dropped.stage, level: levelBefore, leveledUp: false };
+    await writeAttempts(userId, subjectId, "review", subject.objectType, scored, fromStage, dropped.stage);
+    return { ...scored, srsStage: dropped.stage, level: levelBefore, leveledUp: false };
   }
   const next = nextStageOnCorrect(fromStage);
   await applyStage(userId, subjectId, next, 0, levelBefore, row?.unlockedAt ?? new Date());
-  await writeAttempts(userId, subjectId, "review", subject.objectType, graded, fromStage, next);
+  await writeAttempts(userId, subjectId, "review", subject.objectType, scored, fromStage, next);
   const moved = await maybeLevelUp(userId);
-  return { ...graded, srsStage: next, level: moved.level, leveledUp: moved.leveledUp };
+  return { ...scored, srsStage: next, level: moved.level, leveledUp: moved.leveledUp };
+}
+
+export async function gradeStudyBatch(
+  userId: number,
+  kind: StudyKind,
+  items: Array<{
+    subjectId: number;
+    meaning?: string;
+    reading?: string;
+    word?: string;
+    expectedStage?: number;
+  }>,
+) {
+  const results: Array<GradeResult & { srsStage: number; level: number; leveledUp: boolean }> = [];
+  let error: string | undefined;
+  for (const item of items) {
+    try {
+      results.push(
+        await gradeStudyItem(
+          userId,
+          kind,
+          item.subjectId,
+          item.meaning,
+          item.reading,
+          item.word,
+          item.expectedStage,
+        ),
+      );
+    } catch (err) {
+      error = err instanceof Error ? err.message : "Could not save";
+      break;
+    }
+  }
+  return { results, error };
 }
 
 async function applyStage(

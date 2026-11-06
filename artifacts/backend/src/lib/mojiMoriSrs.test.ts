@@ -1,13 +1,17 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  applyWordGrade,
+  assessWordAnswer,
   availableAfter,
   checkPrompt,
+  compositionKanji,
   gradeAnswers,
   intervalMs,
   kanjiNeededToPass,
   nextStageOnWrong,
   roundUpToHour,
+  wordAnswerCorrect,
 } from "./mojiMoriSrs.ts";
 
 const HOUR = 60 * 60 * 1000;
@@ -158,6 +162,70 @@ describe("one prompt at a time", () => {
     const exact = checkPrompt("vocabulary", days, reading, "reading", "とおか");
     assert.equal(exact.correct, true);
     assert.equal(exact.exception, null);
+  });
+});
+
+describe("write word", () => {
+  const nose = {
+    meanings: [{ meaning: "Nose", acceptedAnswer: true }],
+    auxiliary: [],
+    kanji: "鼻",
+    characters: "鼻",
+  };
+  const peers = [
+    {
+      meanings: [{ meaning: "Flower", acceptedAnswer: true }],
+      auxiliary: [],
+      kanji: "花",
+      characters: "花",
+    },
+  ];
+
+  it("keeps composition order, including a repeated kanji", () => {
+    const lookup = (id: number) =>
+      id === 1
+        ? { objectType: "kanji", characters: "努" }
+        : id === 2
+          ? { objectType: "kanji", characters: "力" }
+          : id === 3
+            ? { objectType: "radical", characters: null }
+            : undefined;
+    assert.deepEqual(compositionKanji([1, 3, 2, 1], lookup), ["努", "力", "努"]);
+  });
+
+  it("accepts the target meaning and rejects another word with the same reading", () => {
+    const exact = assessWordAnswer({ method: "meaning", answer: "nose", ...nose, peers });
+    assert.equal(exact.correct, true);
+    assert.equal(exact.homophone, false);
+    const other = assessWordAnswer({ method: "meaning", answer: "Flower", ...nose, peers });
+    assert.equal(other.correct, false);
+    assert.equal(other.homophone, true);
+    const unknown = assessWordAnswer({ method: "meaning", answer: "banana", ...nose, peers });
+    assert.equal(unknown.correct, false);
+    assert.equal(unknown.homophone, false);
+  });
+
+  it("accepts the target kanji and flags a different spelling", () => {
+    const drawn = assessWordAnswer({ method: "kanji", answer: "鼻", ...nose, peers });
+    assert.equal(drawn.correct, true);
+    assert.equal(drawn.homophone, false);
+    const flower = assessWordAnswer({ method: "kanji", answer: "花", ...nose, peers });
+    assert.equal(flower.correct, false);
+    assert.equal(flower.homophone, true);
+    const scribble = assessWordAnswer({ method: "kanji", answer: "木", ...nose, peers: [] });
+    assert.equal(scribble.correct, false);
+    assert.equal(scribble.homophone, false);
+  });
+
+  it("requires a correct word before a vocabulary review passes", () => {
+    const meanings = [{ meaning: "Nose", acceptedAnswer: true }];
+    const readings = [{ reading: "はな", primary: true, acceptedAnswer: true }];
+    const graded = gradeAnswers("vocabulary", meanings, readings, "Nose", "はな");
+    assert.equal(applyWordGrade(graded, null).passed, true);
+    assert.equal(applyWordGrade(graded, false).passed, false);
+    assert.equal(wordAnswerCorrect("Nose", meanings, [], "鼻"), true);
+    assert.equal(wordAnswerCorrect("鼻", meanings, [], "鼻"), true);
+    assert.equal(wordAnswerCorrect("Flower", meanings, [], "鼻"), false);
   });
 });
 

@@ -144,6 +144,22 @@ export type MojiMoriLevelProgress = {
   kanjiRemaining: number;
 };
 
+export type MojiMoriGradeKey = {
+  meanings: MojiMoriMeaning[];
+  readings: MojiMoriReading[];
+  auxiliaryMeanings: MojiMoriAuxiliaryMeaning[];
+  componentReadings: MojiMoriReading[];
+  wordKanji: string[];
+  characters: string | null;
+  peers: Array<{
+    meanings: MojiMoriMeaning[];
+    auxiliary: MojiMoriAuxiliaryMeaning[];
+    kanji: string;
+    characters: string | null;
+  }>;
+  incorrectCount: number;
+};
+
 export type MojiMoriStudyCard = {
   id: number;
   objectType: string;
@@ -152,7 +168,11 @@ export type MojiMoriStudyCard = {
   characterImages: MojiMoriCharacterImage[];
   srsStage?: number;
   pronunciationAudios?: MojiMoriPronunciationAudio[];
-  prompts: Array<"meaning" | "reading">;
+  prompts: Array<"meaning" | "reading" | "word">;
+  wordKanji?: string[];
+  wordReading?: string;
+  wordMeaning?: string;
+  gradeKey?: MojiMoriGradeKey;
   meanings?: MojiMoriMeaning[];
   readings?: MojiMoriReading[];
   meaningMnemonic?: string;

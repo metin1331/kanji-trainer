@@ -1,3 +1,4 @@
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "../lib/apiOrigin";
 import type {
@@ -152,6 +153,7 @@ export type PromptCheck = {
   multipleReadings: boolean;
   lenient: boolean;
   exception: "kanjiReading" | "unusualSpelling" | null;
+  homophone?: boolean;
 };
 
 export type StudyGrade = {
@@ -245,8 +247,9 @@ export function useCheckMojiMori() {
   return useMutation({
     mutationFn: async (body: {
       subjectId: number;
-      prompt: "meaning" | "reading";
+      prompt: "meaning" | "reading" | "word";
       answer: string;
+      method?: "meaning" | "kanji";
     }) => {
       const res = await apiFetch("/api/mojimori/study/check", {
         method: "POST",
@@ -258,6 +261,78 @@ export function useCheckMojiMori() {
   });
 }
 
+export type StudyBatchItem = {
+  subjectId: number;
+  meaning?: string;
+  reading?: string;
+  word?: string;
+  expectedStage?: number;
+};
+
+export function useStudyFlush(kind: "lesson" | "review" | "extra") {
+  const queryClient = useQueryClient();
+  const pending = useRef<StudyBatchItem[]>([]);
+  const flushing = useRef<Promise<void> | null>(null);
+
+  const flush = useCallback(async () => {
+    while (pending.current.length > 0 || flushing.current) {
+      if (flushing.current) {
+        await flushing.current;
+        continue;
+      }
+      const items = pending.current.splice(0);
+      if (items.length === 0) return;
+      const run = (async () => {
+        let applied = 0;
+        let failed: Error | null = null;
+        try {
+          const res = await apiFetch("/api/mojimori/study/grade-batch", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ kind, items }),
+            keepalive: true,
+          });
+          const body = await parseJson<{ results: unknown[]; error?: string }>(res);
+          applied = body.results?.length ?? items.length;
+          if (body.error) failed = new Error(body.error);
+        } catch (err) {
+          failed = err instanceof Error ? err : new Error("Could not save");
+        }
+        if (failed) {
+          pending.current = [...items.slice(applied), ...pending.current];
+          throw failed;
+        }
+        await queryClient.invalidateQueries({ queryKey: ["mojimori"] });
+      })();
+      flushing.current = run.finally(() => {
+        flushing.current = null;
+      });
+      await flushing.current;
+    }
+  }, [kind, queryClient]);
+
+  useEffect(() => {
+    const save = () => {
+      void flush();
+    };
+    window.addEventListener("pagehide", save);
+    return () => {
+      window.removeEventListener("pagehide", save);
+      void flush();
+    };
+  }, [flush]);
+
+  return useMemo(
+    () => ({
+      queue(item: StudyBatchItem) {
+        pending.current.push(item);
+      },
+      flush,
+    }),
+    [flush],
+  );
+}
+
 export function useGradeMojiMori() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -266,6 +341,7 @@ export function useGradeMojiMori() {
       subjectId: number;
       meaning?: string;
       reading?: string;
+      word?: string;
     }) => {
       const res = await apiFetch("/api/mojimori/study/grade", {
         method: "POST",

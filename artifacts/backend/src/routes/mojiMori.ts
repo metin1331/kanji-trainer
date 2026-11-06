@@ -16,7 +16,7 @@ import {
   progressView,
   type MojiMoriProgressView,
 } from "../lib/mojiMoriProgress";
-import { studySnapshot, lessonPicker, lessonQueue, reviewQueue, extraQueue, gradeStudyItem, checkStudyAnswer, updateStudySettings, studySettings, saveSubjectNotes, unburnSubject, subjectAnswerStats, type ExtraMode, type StudyKind } from "../lib/mojiMoriStudy";
+import { studySnapshot, lessonPicker, lessonQueue, reviewQueue, extraQueue, gradeStudyItem, gradeStudyBatch, checkStudyAnswer, checkWordAnswer, updateStudySettings, studySettings, saveSubjectNotes, unburnSubject, subjectAnswerStats, type ExtraMode, type StudyKind } from "../lib/mojiMoriStudy";
 import { COMPLETED_STAGE } from "../lib/mojiMoriUnlock";
 
 const router = Router();
@@ -366,11 +366,46 @@ router.post("/mojimori/study/check", async (req, res, next) => {
     const subjectId = parsePositiveInt(req.body?.subjectId);
     const prompt = req.body?.prompt;
     const answer = typeof req.body?.answer === "string" ? req.body.answer : "";
-    if (!subjectId || (prompt !== "meaning" && prompt !== "reading")) {
+    if (!subjectId || (prompt !== "meaning" && prompt !== "reading" && prompt !== "word")) {
       res.status(400).json({ error: "Invalid check" });
       return;
     }
+    if (prompt === "word") {
+      const method = req.body?.method === "kanji" ? "kanji" : "meaning";
+      res.json(await checkWordAnswer(subjectId, method, answer));
+      return;
+    }
     res.json(await checkStudyAnswer(subjectId, prompt, answer));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/mojimori/study/grade-batch", async (req, res, next) => {
+  try {
+    const kind = req.body?.kind;
+    const raw = Array.isArray(req.body?.items) ? req.body.items : null;
+    if ((kind !== "lesson" && kind !== "review" && kind !== "extra") || !raw || raw.length > 400) {
+      res.status(400).json({ error: "Invalid study batch" });
+      return;
+    }
+    const items = [];
+    for (const item of raw) {
+      const subjectId = parsePositiveInt(item?.subjectId);
+      if (!subjectId) {
+        res.status(400).json({ error: "Invalid id" });
+        return;
+      }
+      const expected = Number(item?.expectedStage);
+      items.push({
+        subjectId,
+        meaning: typeof item?.meaning === "string" ? item.meaning : undefined,
+        reading: typeof item?.reading === "string" ? item.reading : undefined,
+        word: typeof item?.word === "string" ? item.word : undefined,
+        expectedStage: Number.isInteger(expected) ? expected : undefined,
+      });
+    }
+    res.json(await gradeStudyBatch(getUserId(req), kind satisfies StudyKind, items));
   } catch (err) {
     next(err);
   }
@@ -390,12 +425,14 @@ router.post("/mojimori/study/grade", async (req, res, next) => {
     }
     const meaning = typeof req.body?.meaning === "string" ? req.body.meaning : undefined;
     const reading = typeof req.body?.reading === "string" ? req.body.reading : undefined;
+    const word = typeof req.body?.word === "string" ? req.body.word : undefined;
     const result = await gradeStudyItem(
       getUserId(req),
       kind satisfies StudyKind,
       subjectId,
       meaning,
       reading,
+      word,
     );
     res.json(result);
   } catch (err) {

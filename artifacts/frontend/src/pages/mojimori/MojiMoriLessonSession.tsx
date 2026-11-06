@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import {
   ArrowRight,
   ChevronLeft,
@@ -25,13 +25,13 @@ import {
   type MojiMoriSubjectSummary,
 } from "../../lib/mojiMori";
 import {
-  useCheckMojiMori,
-  useGradeMojiMori,
   useMojiMoriLessons,
   useMojiMoriNotes,
   useMojiMoriStudySettings,
   useMojiMoriSubject,
+  useStudyFlush,
 } from "../../hooks/useMojiMori";
+import { checkStudyCard } from "../../lib/mojiMoriGrade";
 import { audioTracks, pickVoice, type AudioTrack } from "./mojiVoice";
 import { toast } from "@/components/smoothui/toast";
 import { MnemonicText } from "./MnemonicText";
@@ -84,7 +84,9 @@ function Glyph({ card }: { card: MojiMoriStudyCard }) {
 
 export function MojiMoriLessonSession({ ids }: { ids?: number[] }) {
   const { t } = useTranslation();
+  const [, setLocation] = useLocation();
   const lessons = useMojiMoriLessons(ids);
+  const studyFlush = useStudyFlush("lesson");
   const [order, setOrder] = useState<MojiMoriStudyCard[] | null>(null);
   const [index, setIndex] = useState(0);
   const [slide, setSlide] = useState<SlideId>("meaning");
@@ -102,8 +104,6 @@ export function MojiMoriLessonSession({ ids }: { ids?: number[] }) {
   const land = useRef<"start" | "end" | "stay">("start");
   const inputRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
-  const check = useCheckMojiMori();
-  const grade = useGradeMojiMori();
   const prefs = useMojiMoriStudySettings();
   const heard = useRef("");
 
@@ -220,7 +220,10 @@ export function MojiMoriLessonSession({ ids }: { ids?: number[] }) {
     if (!order?.length) return;
     const next: Task[] = [];
     for (const item of order) {
-      for (const prompt of item.prompts) next.push({ id: item.id, prompt });
+      for (const prompt of item.prompts) {
+        if (prompt === "word") continue;
+        next.push({ id: item.id, prompt });
+      }
     }
     answers.current = {};
     setTasks(next);
@@ -248,14 +251,14 @@ export function MojiMoriLessonSession({ ids }: { ids?: number[] }) {
     setTasks((list) => (leave === "miss" ? [...list.slice(1), current] : list.slice(1)));
   }
 
-  async function submitQuiz() {
+  function submitQuiz() {
     if (pending) {
       advanceQuiz();
       return;
     }
     const current = tasks[0];
     const subject = order?.find((item) => item.id === current?.id);
-    if (!current || !subject || check.isPending || grade.isPending) return;
+    if (!current || !subject) return;
     const answer = current.prompt === "reading" ? romajiToKanaInput(draft) : draft.trim();
     if (current.prompt === "reading" && readingAnswerIncomplete(answer)) {
       setDraft(answer);
@@ -265,11 +268,7 @@ export function MojiMoriLessonSession({ ids }: { ids?: number[] }) {
       return;
     }
     if (current.prompt === "reading") setDraft(answer);
-    const result = await check.mutateAsync({
-      subjectId: current.id,
-      prompt: current.prompt,
-      answer,
-    });
+    const result = checkStudyCard(subject, current.prompt, answer);
     if (result.shake) {
       if (result.exception === "kanjiReading") {
         toast(t("mojimori.study.wantVocabReading"));
@@ -294,26 +293,23 @@ export function MojiMoriLessonSession({ ids }: { ids?: number[] }) {
     if (current.prompt === "reading" && result.multipleReadings) toast(t("mojimori.study.multipleReadings"));
     const next = { ...answers.current[current.id], [current.prompt]: answer };
     answers.current = { ...answers.current, [current.id]: next };
-    const finished = subject.prompts.every((prompt) => Boolean(next[prompt]));
-    if (finished) {
-      try {
-        const graded = await grade.mutateAsync({
-          kind: "lesson",
-          subjectId: current.id,
-          meaning: next.meaning,
-          reading: next.reading,
-        });
-        if (!graded.passed) {
-          setMissText(current.prompt === "meaning" ? primaryMeaning(subject) : primaryReading(subject));
-          setPending("miss");
-          return;
-        }
-      } catch {
-        setNotice(t("mojimori.study.incorrect"));
-        return;
-      }
+    if (subject.prompts.every((prompt) => prompt === "word" || Boolean(next[prompt]))) {
+      studyFlush.queue({
+        subjectId: current.id,
+        meaning: next.meaning,
+        reading: next.reading,
+        expectedStage: 0,
+      });
     }
     setPending("ok");
+  }
+
+  function goHome(event: { preventDefault: () => void }) {
+    event.preventDefault();
+    void studyFlush.flush().then(
+      () => setLocation("/mojimori"),
+      () => toast(t("mojimori.study.saveFailed")),
+    );
   }
 
   const actions = useRef({
@@ -326,6 +322,11 @@ export function MojiMoriLessonSession({ ids }: { ids?: number[] }) {
     advanceQuiz,
   });
   actions.current = { phase, pending, moveSlide, skip, startQuiz, playFirst, advanceQuiz };
+
+  useEffect(() => {
+    if (phase !== "quiz" || tasks.length > 0 || !order?.length) return;
+    void studyFlush.flush().catch(() => toast(t("mojimori.study.saveFailed")));
+  }, [phase, tasks.length, order, studyFlush, t]);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -392,7 +393,7 @@ export function MojiMoriLessonSession({ ids }: { ids?: number[] }) {
     return (
       <section className="glass-panel mm-lesson__done">
         <p>{t("mojimori.study.lessonsDone")}</p>
-        <Link href="/mojimori" className="moji-btn-primary">
+        <Link href="/mojimori" className="moji-btn-primary" onClick={goHome}>
           {t("mojimori.study.returnHome")}
         </Link>
       </section>
@@ -410,7 +411,6 @@ export function MojiMoriLessonSession({ ids }: { ids?: number[] }) {
     vocabulary: remaining.filter((item) => item.objectType === "vocabulary").length,
   };
   const meaning = primaryMeaning(shown);
-  const busy = check.isPending || grade.isPending;
 
   return (
     <div className="mm-lesson" data-kind={shown.objectType}>
@@ -418,7 +418,7 @@ export function MojiMoriLessonSession({ ids }: { ids?: number[] }) {
       <div className="mm-lesson__card">
       <header className="mm-lesson__stage" data-kind={shown.objectType}>
         <div className="mm-lesson__bar">
-          <Link href="/mojimori" className="mm-quiz__home" title={t("mojimori.study.returnHome")}>
+          <Link href="/mojimori" className="mm-quiz__home" title={t("mojimori.study.returnHome")} onClick={goHome}>
             <House size={18} />
           </Link>
           <div className="mm-lesson__counts">
@@ -580,7 +580,7 @@ export function MojiMoriLessonSession({ ids }: { ids?: number[] }) {
                   }}
                 />
               )}
-              <button type="submit" className="mm-quiz__go" disabled={busy} aria-label={t("mojimori.study.check")}>
+              <button type="submit" className="mm-quiz__go" aria-label={t("mojimori.study.check")}>
                 <ChevronRight size={22} />
               </button>
             </div>

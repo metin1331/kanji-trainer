@@ -16,20 +16,20 @@ import {
   Volume2,
   X,
 } from "lucide-react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { toast } from "@/components/smoothui/toast";
 import { MojiMoriLoading } from "./MojiMoriLoading";
 import {
-  useCheckMojiMori,
-  useGradeMojiMori,
   useMojiMoriExtra,
   useMojiMoriNotes,
   useMojiMoriReviews,
   useMojiMoriStudySettings,
   mojiMoriSubjectQuery,
   useMojiMoriSubject,
+  useStudyFlush,
   type StudyGrade,
 } from "../../hooks/useMojiMori";
+import { checkStudyCard, predictReviewGrade } from "../../lib/mojiMoriGrade";
 import { useTranslation } from "../../i18n/I18nProvider";
 import {
   blocksReadingLatin,
@@ -47,8 +47,9 @@ import { MnemonicText } from "./MnemonicText";
 import { MojiMoriLayout } from "./MojiMoriLayout";
 import { SubjectTile, SubjectTileGrid } from "./SubjectTile";
 import { audioTracks, pickVoice } from "./mojiVoice";
+import { KanjiStrokeQuiz } from "./KanjiStrokeQuiz";
 
-type Prompt = "meaning" | "reading";
+type Prompt = "meaning" | "reading" | "word";
 type Task = { subjectId: number; prompt: Prompt; retry: boolean };
 
 function parkMiss(tasks: Task[], missed: Task): Task[] {
@@ -68,7 +69,12 @@ function parkMiss(tasks: Task[], missed: Task): Task[] {
   return later;
 }
 type Attempt = { answer: string; correct: boolean };
-type ItemRecord = { meaning?: Attempt; reading?: Attempt; grade?: StudyGrade };
+type ItemRecord = {
+  meaning?: Attempt;
+  reading?: Attempt;
+  word?: Attempt;
+  grade?: StudyGrade;
+};
 type Sheet = "none" | "last" | "info" | "kana";
 
 const KANA_PAGES: {
@@ -253,7 +259,8 @@ function holdCaret(input: HTMLInputElement | null) {
   window.setTimeout(place, 40);
 }
 
-function Glyph({ card }: { card: MojiMoriStudyCard }) {
+function Glyph({ card, reading }: { card: MojiMoriStudyCard; reading?: string }) {
+  if (reading) return <span lang="ja">{reading}</span>;
   if (card.characters) return <span lang="ja">{card.characters}</span>;
   const src = pickCharacterImage(card.characterImages);
   if (src) return <img src={src} alt="" />;
@@ -268,11 +275,11 @@ export function MojiMoriReviewSession({
   extraMode?: string;
 } = {}) {
   const { t } = useTranslation();
+  const [, setLocation] = useLocation();
   const reviews = useMojiMoriReviews(source === "review");
   const extra = useMojiMoriExtra(extraMode, source === "extra");
   const feed = source === "extra" ? extra : reviews;
-  const check = useCheckMojiMori();
-  const grade = useGradeMojiMori();
+  const studyFlush = useStudyFlush(source === "extra" ? "extra" : "review");
   const [cards, setCards] = useState<MojiMoriStudyCard[] | null>(null);
   const [queue, setQueue] = useState<Task[]>([]);
   const [records, setRecords] = useState<Record<number, ItemRecord>>({});
@@ -292,9 +299,12 @@ export function MojiMoriReviewSession({
     up: boolean;
   } | null>(null);
   const [infoWanted, setInfoWanted] = useState(false);
-  const [busy, setBusy] = useState(false);
   const [kanaTab, setKanaTab] = useState("a");
   const [playing, setPlaying] = useState<string | null>(null);
+  const [wordMethod, setWordMethod] = useState<"meaning" | "kanji">("kanji");
+  const [wordHint, setWordHint] = useState(false);
+  const [strokeIndex, setStrokeIndex] = useState(0);
+  const [drawTry, setDrawTry] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const goRef = useRef<HTMLButtonElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -339,13 +349,19 @@ export function MojiMoriReviewSession({
   const done = (cards ?? []).filter((item) => !queuedIds.has(item.id)).length;
   const total = cards?.length ?? 0;
   const asked = Object.values(records).reduce((sum, record) => {
-    return sum + (record.meaning ? 1 : 0) + (record.reading ? 1 : 0);
+    return (
+      sum +
+      (record.meaning ? 1 : 0) +
+      (record.reading ? 1 : 0) +
+      (record.word ? 1 : 0)
+    );
   }, 0);
   const correct = Object.values(records).reduce((sum, record) => {
     return (
       sum +
       (record.meaning?.correct ? 1 : 0) +
-      (record.reading?.correct ? 1 : 0)
+      (record.reading?.correct ? 1 : 0) +
+      (record.word?.correct ? 1 : 0)
     );
   }, 0);
   const percent = asked === 0 ? 100 : Math.round((100 * correct) / asked);
@@ -365,7 +381,7 @@ export function MojiMoriReviewSession({
   useEffect(() => {
     if (mode === "ask") inputRef.current?.focus({ preventScroll: true });
     else goRef.current?.focus({ preventScroll: true });
-  }, [current?.subjectId, current?.prompt, current?.retry, mode]);
+  }, [current?.subjectId, current?.prompt, current?.retry, mode, wordMethod]);
 
   useEffect(() => {
     const narrow = window.matchMedia("(max-width: 640px)");
@@ -533,6 +549,10 @@ export function MojiMoriReviewSession({
     setSheet("none");
     setInfoWanted(false);
     setInfoDenied(false);
+    setWordMethod("kanji");
+    setWordHint(false);
+    setStrokeIndex(0);
+    setDrawTry(0);
   }
 
   function advance() {
@@ -612,13 +632,13 @@ export function MojiMoriReviewSession({
     });
   }
 
-  async function submitAnswer() {
-    if (!current || !card || busy) return;
+  function submitAnswer(word?: { answer: string; method: "meaning" | "kanji" }) {
+    if (!current || !card) return;
     if (pending) {
       advance();
       return;
     }
-    const raw = draft.trim();
+    const raw = (word?.answer ?? draft).trim();
     if (!raw) return;
     const submitted =
       current.prompt === "reading" ? romajiToKanaInput(raw) : raw;
@@ -628,85 +648,101 @@ export function MojiMoriReviewSession({
       holdCaret(inputRef.current);
       return;
     }
-    setBusy(true);
     setNotice("");
-    try {
-      const checked = await check.mutateAsync({
-        subjectId: card.id,
-        prompt: current.prompt,
-        answer: submitted,
-      });
-      if (checked.shake) {
-        if (checked.exception === "kanjiReading") {
-          toast(t("mojimori.study.wantVocabReading"));
-          setNotice("");
-        } else if (checked.exception === "unusualSpelling") {
-          toast(t("mojimori.study.unusualSpelling"));
-          setNotice("");
-        } else setNotice(shakeFor(checked.wantedType));
+    const checked = checkStudyCard(
+      card,
+      current.prompt,
+      submitted,
+      word?.method ?? "meaning",
+    );
+    if (checked.homophone) {
+      toast(t("mojimori.study.homophone"));
+      if (word?.method === "kanji") {
+        setStrokeIndex(0);
+        setDrawTry((value) => value + 1);
+      } else {
         pulseShake();
         holdCaret(inputRef.current);
-        return;
       }
-      const prev = recordsRef.current[card.id] ?? {};
-      const first = !prev[current.prompt];
-      const next: ItemRecord = { ...prev };
-      if (first)
-        next[current.prompt] = { answer: submitted, correct: checked.correct };
-      if (
-        first &&
-        card.prompts.every((prompt) => next[prompt]) &&
-        !next.grade
-      ) {
-        const result = await grade.mutateAsync({
-          kind: source === "extra" ? "extra" : "review",
-          subjectId: card.id,
-          meaning: next.meaning?.answer,
-          reading: next.reading?.answer,
-        });
-        if (source !== "extra") next.grade = result;
+      return;
+    }
+    if (checked.shake) {
+      if (checked.exception === "kanjiReading") {
+        toast(t("mojimori.study.wantVocabReading"));
+        setNotice("");
+      } else if (checked.exception === "unusualSpelling") {
+        toast(t("mojimori.study.unusualSpelling"));
+        setNotice("");
+      } else setNotice(shakeFor(checked.wantedType));
+      pulseShake();
+      holdCaret(inputRef.current);
+      return;
+    }
+    const prev = recordsRef.current[card.id] ?? {};
+    const first = !prev[current.prompt];
+    const next: ItemRecord = { ...prev };
+    if (first) next[current.prompt] = { answer: submitted, correct: checked.correct };
+    if (first && card.prompts.every((prompt) => next[prompt]) && !next.grade) {
+      studyFlush.queue({
+        subjectId: card.id,
+        meaning: next.meaning?.answer,
+        reading: next.reading?.answer,
+        word: next.word?.answer,
+        expectedStage: card.srsStage ?? 0,
+      });
+      if (source !== "extra") {
+        next.grade =
+          predictReviewGrade(card, {
+            meaning: next.meaning?.answer,
+            reading: next.reading?.answer,
+            word: next.word?.answer,
+          }) ?? undefined;
       }
-      recordsRef.current = { ...recordsRef.current, [card.id]: next };
-      setRecords(recordsRef.current);
-      setRecent((list) => [card.id, ...list.filter((id) => id !== card.id)]);
-      if (!checked.correct) {
-        toast(
-          current.prompt === "reading"
+    }
+    recordsRef.current = { ...recordsRef.current, [card.id]: next };
+    setRecords(recordsRef.current);
+    setRecent((list) => [card.id, ...list.filter((id) => id !== card.id)]);
+    if (!checked.correct) {
+      toast(
+        current.prompt === "word"
+          ? t("mojimori.study.helpWord")
+          : current.prompt === "reading"
             ? t("mojimori.study.helpReading")
             : t("mojimori.study.helpMeaning"),
-        );
-        setMissText(submitted);
-        setMode("miss");
-        setPending("miss");
-        setInfoWanted(true);
-        setInfoDenied(false);
-        if (next.grade)
-          setSrsFlash({ stage: next.grade.srsStage, up: next.grade.passed });
-        return;
-      }
-      if (first && checked.lenient) {
-        toast(t("mojimori.study.helpMeaning"));
-      } else if (
-        first &&
-        current.prompt === "meaning" &&
-        checked.multipleMeanings
-      ) {
-        toast(t("mojimori.study.multipleMeanings"));
-      }
-      if (first && current.prompt === "reading" && checked.multipleReadings) {
-        toast(t("mojimori.study.multipleReadings"));
-      }
-      if (next.grade && first) {
-        setSrsFlash({ stage: next.grade.srsStage, up: next.grade.passed });
-      }
-      setPending("ok");
-    } catch (err) {
-      setNotice(
-        err instanceof Error ? err.message : t("mojimori.study.incorrect"),
       );
-    } finally {
-      setBusy(false);
+      setMissText(submitted);
+      setMode("miss");
+      setPending("miss");
+      setInfoWanted(true);
+      setInfoDenied(false);
+      if (next.grade) setSrsFlash({ stage: next.grade.srsStage, up: next.grade.passed });
+      return;
     }
+    if (first && checked.lenient && current.prompt !== "reading") {
+      toast(t("mojimori.study.helpMeaning"));
+    } else if (first && current.prompt === "meaning" && checked.multipleMeanings) {
+      toast(t("mojimori.study.multipleMeanings"));
+    }
+    if (first && current.prompt === "reading" && checked.multipleReadings) {
+      toast(t("mojimori.study.multipleReadings"));
+    }
+    if (next.grade && first) {
+      setSrsFlash({ stage: next.grade.srsStage, up: next.grade.passed });
+    }
+    setPending("ok");
+  }
+
+  useEffect(() => {
+    if (!ready || queue.length > 0 || (cards?.length ?? 0) === 0) return;
+    void studyFlush.flush().catch(() => toast(t("mojimori.study.saveFailed")));
+  }, [ready, queue.length, cards, studyFlush, t]);
+
+  function goHome(event: { preventDefault: () => void }) {
+    event.preventDefault();
+    void studyFlush.flush().then(
+      () => setLocation("/mojimori"),
+      () => toast(t("mojimori.study.saveFailed")),
+    );
   }
 
   useEffect(() => {
@@ -770,7 +806,7 @@ export function MojiMoriReviewSession({
                     : "mojimori.study.reviewsDone",
                 )}
           </h1>
-          <Link href="/mojimori" className="moji-btn-primary">
+          <Link href="/mojimori" className="moji-btn-primary" onClick={goHome}>
             {t("mojimori.study.returnHome")}
           </Link>
         </section>
@@ -779,7 +815,17 @@ export function MojiMoriReviewSession({
     const promptWord =
       current.prompt === "meaning"
         ? t("mojimori.study.meaningWord")
-        : t("mojimori.study.readingWord");
+        : current.prompt === "word"
+          ? t("mojimori.study.wordWord")
+          : t("mojimori.study.readingWord");
+    const wordKanji = card.wordKanji ?? [];
+    const wordDraw =
+      current.prompt === "word" &&
+      wordMethod === "kanji" &&
+      mode === "ask" &&
+      pending == null &&
+      wordKanji.length > 0;
+    const showWordMeaning = current.prompt === "word" && wordHint;
     const audioEnabled = current.prompt === "reading" && tracks.length > 0;
     const infoAnswered =
       mode === "miss" || Boolean(records[card.id]?.[current.prompt]);
@@ -801,6 +847,7 @@ export function MojiMoriReviewSession({
               href="/mojimori"
               className="mm-quiz__home"
               title={t("mojimori.study.returnHome")}
+              onClick={goHome}
             >
               <House size={18} />
             </Link>
@@ -819,7 +866,9 @@ export function MojiMoriReviewSession({
               </span>
             </div>
           </div>
-          <div className="mm-quiz__glyph">
+          <div
+            className={`mm-quiz__glyph${current.prompt === "word" ? " is-word" : ""}`}
+          >
             {source === "extra" ? (
               <p className="mm-quiz__mode">
                 {extraMode === "recent-mistakes"
@@ -829,7 +878,15 @@ export function MojiMoriReviewSession({
                     : t("mojimori.study.extraRecentLessons")}
               </p>
             ) : null}
-            <Glyph card={card} />
+            <Glyph
+              card={card}
+              reading={
+                current.prompt === "word" ? card.wordReading || "…" : undefined
+              }
+            />
+            {showWordMeaning && card.wordMeaning ? (
+              <p className="mm-quiz__word-meaning">{card.wordMeaning}</p>
+            ) : null}
           </div>
           <div className="mm-quiz__stage-footer">
             <AnimatePresence>
@@ -868,6 +925,58 @@ export function MojiMoriReviewSession({
           }}
         >
           {notice ? <p className="mm-quiz__exception">{notice}</p> : null}
+          {current.prompt === "word" && mode === "ask" && !pending ? (
+            <div className="mm-word__methods">
+              <button
+                type="button"
+                className={wordMethod === "meaning" ? "is-on" : ""}
+                onClick={() => setWordMethod("meaning")}
+              >
+                {t("mojimori.study.wordMeaningMethod")}
+              </button>
+              <button
+                type="button"
+                className={wordMethod === "kanji" ? "is-on" : ""}
+                disabled={wordKanji.length === 0}
+                onClick={() => setWordMethod("kanji")}
+              >
+                {t("mojimori.study.wordDrawMethod")}
+              </button>
+              <button
+                type="button"
+                className={wordHint ? "is-on" : ""}
+                onClick={() => setWordHint(true)}
+              >
+                {t("mojimori.study.wordHint")}
+              </button>
+            </div>
+          ) : null}
+          {wordDraw ? (
+            <div className="mm-word">
+              <p className="mm-word__progress">
+                {t("mojimori.study.wordProgress", {
+                  current: Math.min(strokeIndex + 1, wordKanji.length),
+                  total: wordKanji.length,
+                })}
+              </p>
+              <KanjiStrokeQuiz
+                key={`${card.id}-${strokeIndex}-${drawTry}`}
+                character={wordKanji[strokeIndex] ?? ""}
+                unsupported={t("mojimori.study.wordUnsupported")}
+                onDone={() => {
+                  const next = strokeIndex + 1;
+                  if (next >= wordKanji.length) {
+                    void submitAnswer({
+                      answer: wordKanji.join(""),
+                      method: "kanji",
+                    });
+                    return;
+                  }
+                  setStrokeIndex(next);
+                }}
+              />
+            </div>
+          ) : (
           <div
             className={`mm-quiz__entry ${shaking ? "is-shaking" : ""}${pending === "ok" ? "is-ok" : ""}${pending === "miss" ? "is-bad" : ""}`}
             onAnimationEnd={() => setShaking(false)}
@@ -925,12 +1034,12 @@ export function MojiMoriReviewSession({
               ref={goRef}
               type="submit"
               className="mm-quiz__go"
-              disabled={busy}
               aria-label={t("mojimori.study.check")}
             >
               <ChevronRight size={22} />
             </button>
           </div>
+          )}
         </form>
         <div className="mm-quiz__tools">
           <button
@@ -995,9 +1104,11 @@ export function MojiMoriReviewSession({
         </div>
         {mode === "miss" ? (
           <p className="mm-quiz__help">
-            {current.prompt === "reading"
-              ? t("mojimori.study.helpReading")
-              : t("mojimori.study.helpMeaning")}
+            {current.prompt === "word"
+              ? t("mojimori.study.helpWord")
+              : current.prompt === "reading"
+                ? t("mojimori.study.helpReading")
+                : t("mojimori.study.helpMeaning")}
           </p>
         ) : null}
         {sheet !== "none" ? (
@@ -1091,6 +1202,11 @@ function LastAnswers({
                   <AnswerLine attempt={record.reading} kana />
                 </span>
               ) : null}
+              {record.word ? (
+                <span className="mm-quiz__last-readings">
+                  <AnswerLine attempt={record.word} />
+                </span>
+              ) : null}
             </span>
             {record.grade ? (
               <span
@@ -1143,9 +1259,11 @@ function ReviewInfo({
   const { t } = useTranslation();
   const [open, setOpen] = useState({
     radicals: prompt === "meaning" && detail.objectType === "kanji",
-    meaning: prompt === "meaning",
-    reading: prompt === "reading",
-    context: prompt === "meaning" && detail.objectType === "vocabulary",
+    meaning: prompt === "meaning" || prompt === "word",
+    reading: prompt === "reading" || prompt === "word",
+    context:
+      (prompt === "meaning" || prompt === "word") &&
+      detail.objectType === "vocabulary",
     parts: false,
     found: false,
   });
