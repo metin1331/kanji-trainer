@@ -2259,8 +2259,11 @@ button.forecast-row {
   width: 2rem;
   height: 2rem;
   justify-content: center;
+  padding: 0;
+  border: 0;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.28);
+  cursor: pointer;
 }
 
 .mm-quiz__glyph {
@@ -2624,7 +2627,7 @@ button.forecast-row {
   position: absolute;
   left: 0;
   right: 0;
-  bottom: 9rem;
+  bottom: 10rem;
   margin: 0;
   padding: 0.4rem 0.75rem 0.15rem;
   color: var(--color-ink);
@@ -2658,7 +2661,7 @@ button.forecast-row {
 
 @media (max-width: 640px) {
   .mm-quiz__mode {
-    bottom: 9.25rem;
+    bottom: 8.5rem;
 }
   .mm-quiz__stage {
     min-height: 10rem;
@@ -2691,6 +2694,12 @@ html:has(.mm-quiz__tools) [data-slot="toast-viewport"] {
 html:has(.mm-quiz__tools) [data-slot="toast"] {
   width: auto;
   max-width: min(28rem, 100%);
+}
+
+@media (max-width: 640px) {
+  html:has(.mm-quiz__tools) [data-slot="toast-viewport"] {
+    padding-inline: 1rem;
+  }
 }
 
 .mm-quiz__tools {

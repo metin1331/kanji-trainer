@@ -245,7 +245,7 @@ export default function Toaster({
   children,
   className,
   limit = 1,
-  timeout,
+  timeout = 3000,
   toastManager: manager,
 }: ToasterProps) {
   return (

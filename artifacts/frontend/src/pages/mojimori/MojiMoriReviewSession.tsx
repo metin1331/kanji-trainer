@@ -843,14 +843,15 @@ export function MojiMoriReviewSession({
         </div>
         <header className="mm-quiz__stage" data-kind={card.objectType}>
           <div className="mm-quiz__stage-bar">
-            <Link
-              href="/mojimori"
+            <button
+              type="button"
               className="mm-quiz__home"
               title={t("mojimori.study.returnHome")}
+              aria-label={t("mojimori.study.returnHome")}
               onClick={goHome}
             >
               <House size={18} />
-            </Link>
+            </button>
             <div className="mm-quiz__stats">
               <span title={t("mojimori.study.percentTitle")}>
                 <ThumbsUp size={15} />
