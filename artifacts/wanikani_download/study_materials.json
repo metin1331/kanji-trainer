@@ -1,17 +1,1 @@
-﻿{
-    "id":  35280699,
-    "object":  "study_material",
-    "url":  "https://api.wanikani.com/v2/study_materials/35280699",
-    "data_updated_at":  "2026-10-27T14:34:32.790829Z",
-    "data":  {
-                 "created_at":  "2026-10-27T14:34:25.560436Z",
-                 "subject_id":  6,
-                 "subject_type":  "radical",
-                 "meaning_note":  "",
-                 "reading_note":  "",
-                 "meaning_synonyms":  [
-
-                                      ],
-                 "hidden":  false
-             }
-}
+{"object":"collection","url":"https://api.wanikani.com/v2/study_materials","pages":{"per_page":500,"next_url":null,"previous_url":null},"total_count":2,"data_updated_at":"2026-11-06T08:08:28.550509Z","data":[{"id":35280699,"object":"study_material","url":"https://api.wanikani.com/v2/study_materials/35280699","data_updated_at":"2026-10-27T14:34:32.790829Z","data":{"created_at":"2026-10-27T14:34:25.560436Z","subject_id":6,"subject_type":"radical","meaning_note":"","reading_note":"","meaning_synonyms":[],"hidden":false}},{"id":35508938,"object":"study_material","url":"https://api.wanikani.com/v2/study_materials/35508938","data_updated_at":"2026-11-06T08:08:28.550509Z","data":{"created_at":"2026-11-06T08:07:43.969882Z","subject_id":2611,"subject_type":"vocabulary","meaning_note":"","reading_note":"","meaning_synonyms":["Deneme"],"hidden":false}}]}
