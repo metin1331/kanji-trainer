@@ -2942,7 +2942,7 @@ html:has(.mm-quiz__tools) [data-slot="toast"] {
   height: 100%;
   min-height: 2.55rem;
   border: 1px solid transparent;
-  border-radius: 999px;
+  border-radius: 12px;
   background: transparent;
   padding: 0.4rem 0.45rem;
   color: var(--color-muted);
@@ -3019,7 +3019,7 @@ html:has(.mm-quiz__tools) [data-slot="toast"] {
 .mm-quiz__sheet {
   /* border-top: 1px solid var(--color-line); */
   margin-top: -0.4rem;
-  padding: 0rem 0.9rem 1rem;
+  padding: 0rem 0.9rem 2rem;
 }
 
 .mm-quiz__empty,
