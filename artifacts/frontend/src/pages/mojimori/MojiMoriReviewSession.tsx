@@ -288,6 +288,8 @@ export function MojiMoriReviewSession({
   const [draft, setDraft] = useState("");
   const [mode, setMode] = useState<"ask" | "miss">("ask");
   const [missText, setMissText] = useState("");
+  const [missTint, setMissTint] = useState(false);
+  const [answerLocked, setAnswerLocked] = useState(false);
   const [notice, setNotice] = useState("");
   const [shaking, setShaking] = useState(false);
   const [sheet, setSheet] = useState<Sheet>("none");
@@ -548,6 +550,8 @@ export function MojiMoriReviewSession({
     setDraft("");
     setNotice("");
     setMissText("");
+    setMissTint(false);
+    setAnswerLocked(false);
     setSrsFlash(null);
     setSheet("none");
     setInfoWanted(false);
@@ -561,14 +565,13 @@ export function MojiMoriReviewSession({
     setDrawTry(0);
   }
 
-  function advance() {
+  function advance(leave: "ok" | "miss" | null = pending) {
     if (leaving.current) return;
     leaving.current = true;
     queueMicrotask(() => {
       leaving.current = false;
     });
     const task = current;
-    const leave = pending;
     clearCard();
     if (leave === "miss" && task) {
       setQueue((tasks) => parkMiss(tasks, task));
@@ -607,10 +610,48 @@ export function MojiMoriReviewSession({
     setPlaying(track.url);
   }, [prefs.data, card, current, tracks, source]);
 
+  function commitMiss(answer: string) {
+    if (!current || !card) return;
+    const prev = recordsRef.current[card.id] ?? {};
+    if (prev[current.prompt]) return;
+    const next: ItemRecord = {
+      ...prev,
+      [current.prompt]: { answer, correct: false },
+    };
+    const storedWord = next.word?.reveal ? "\u00d7" : next.word?.answer;
+    if (card.prompts.every((prompt) => next[prompt]) && !next.grade) {
+      studyFlush.queue({
+        subjectId: card.id,
+        meaning: next.meaning?.answer,
+        reading: next.reading?.answer,
+        word: storedWord,
+        expectedStage: card.srsStage ?? 0,
+      });
+      if (source !== "extra") {
+        next.grade =
+          predictReviewGrade(card, {
+            meaning: next.meaning?.answer,
+            reading: next.reading?.answer,
+            word: storedWord,
+          }) ?? undefined;
+      }
+    }
+    recordsRef.current = { ...recordsRef.current, [card.id]: next };
+    setRecords(recordsRef.current);
+    setRecent((list) => [card.id, ...list.filter((id) => id !== card.id)]);
+    if (next.grade) setSrsFlash({ stage: next.grade.srsStage, up: next.grade.passed });
+    setPending("miss");
+    setAnswerLocked(true);
+    setMissTint(true);
+  }
+
   function toggleInfo() {
     if (!card || !current) return;
     const answered =
-      mode === "miss" || Boolean(recordsRef.current[card.id]?.[current.prompt]);
+      missTint ||
+      answerLocked ||
+      mode === "miss" ||
+      Boolean(recordsRef.current[card.id]?.[current.prompt]);
     if (!answered) {
       setInfoDenied(true);
       window.setTimeout(() => setInfoDenied(false), 1600);
@@ -622,6 +663,10 @@ export function MojiMoriReviewSession({
       setSheet("none");
       return;
     }
+    if (missTint && !recordsRef.current[card.id]?.[current.prompt]) {
+      commitMiss(missText);
+    }
+    setAnswerLocked(true);
     setInfoWanted(true);
   }
 
@@ -687,6 +732,26 @@ export function MojiMoriReviewSession({
       holdCaret(inputRef.current);
       return;
     }
+    if (!checked.correct && !word?.reveal) {
+      toast(
+        current.prompt === "word"
+          ? t("mojimori.study.helpWord")
+          : current.prompt === "reading"
+            ? t("mojimori.study.helpReading")
+            : t("mojimori.study.helpMeaning"),
+      );
+      if (missTint && submitted === missText) {
+        commitMiss(submitted);
+        advance("miss");
+        return;
+      }
+      setMissText(submitted);
+      setDraft(submitted);
+      setMissTint(true);
+      setInfoDenied(false);
+      holdCaret(inputRef.current);
+      return;
+    }
     const prev = recordsRef.current[card.id] ?? {};
     const first = !prev[current.prompt];
     const next: ItemRecord = { ...prev };
@@ -727,9 +792,10 @@ export function MojiMoriReviewSession({
             : t("mojimori.study.helpMeaning"),
       );
       setMissText(submitted);
+      setMissTint(true);
+      setAnswerLocked(true);
       setMode("miss");
       setPending("miss");
-      setInfoWanted(true);
       setInfoDenied(false);
       if (next.grade) setSrsFlash({ stage: next.grade.srsStage, up: next.grade.passed });
       return;
@@ -846,7 +912,10 @@ export function MojiMoriReviewSession({
       current.prompt === "word" && wordMethod === "meaning" && spellingHint;
     const audioEnabled = current.prompt === "reading" && tracks.length > 0;
     const infoAnswered =
-      mode === "miss" || Boolean(records[card.id]?.[current.prompt]);
+      missTint ||
+      answerLocked ||
+      mode === "miss" ||
+      Boolean(records[card.id]?.[current.prompt]);
     const wrapCount = new Set(
       queue
         .filter((task) => records[task.subjectId])
@@ -1052,10 +1121,10 @@ export function MojiMoriReviewSession({
             </div>
           ) : (
           <div
-            className={`mm-quiz__entry ${shaking ? "is-shaking" : ""}${pending === "ok" ? "is-ok" : ""}${pending === "miss" ? "is-bad" : ""}`}
+            className={`mm-quiz__entry ${shaking ? "is-shaking" : ""}${pending === "ok" ? "is-ok" : ""}${missTint ? "is-bad" : ""}`}
             onAnimationEnd={() => setShaking(false)}
           >
-            {mode === "miss" ? (
+            {mode === "miss" && answerLocked ? (
               <p className="mm-quiz__wrong">{missText}</p>
             ) : (
               <input
@@ -1066,7 +1135,7 @@ export function MojiMoriReviewSession({
                 autoCorrect="off"
                 autoComplete="off"
                 spellCheck={false}
-                readOnly={pending === "ok"}
+                readOnly={pending === "ok" || answerLocked}
                 onKeyDown={(event) => {
                   if (current.prompt !== "reading") return;
                   if (
@@ -1090,16 +1159,15 @@ export function MojiMoriReviewSession({
                   }
                 }}
                 onChange={(event) => {
+                  if (answerLocked) return;
                   const value = event.target.value;
-                  if (current.prompt !== "reading") {
-                    setDraft(value);
-                    return;
-                  }
-                  const next = romajiToKanaInput(value);
-                  if (!readingInputAllows(next)) {
+                  const next =
+                    current.prompt === "reading" ? romajiToKanaInput(value) : value;
+                  if (current.prompt === "reading" && !readingInputAllows(next)) {
                     pulseShake();
                     return;
                   }
+                  if (missTint && next !== missText) setMissTint(false);
                   setDraft(next);
                 }}
               />
@@ -1176,7 +1244,7 @@ export function MojiMoriReviewSession({
             <Volume2 size={16} />
           </button>
         </div>
-        {mode === "miss" ? (
+        {missTint || mode === "miss" ? (
           <p className="mm-quiz__help">
             {current.prompt === "word"
               ? t("mojimori.study.helpWord")
@@ -1204,10 +1272,14 @@ export function MojiMoriReviewSession({
                 tab={kanaTab}
                 onTab={setKanaTab}
                 onInsert={(kana) => {
+                  if (answerLocked) return;
+                  setMissTint(false);
                   setDraft((value) => value + kana);
                   inputRef.current?.focus({ preventScroll: true });
                 }}
                 onBackspace={() => {
+                  if (answerLocked) return;
+                  setMissTint(false);
                   setDraft((value) => [...value].slice(0, -1).join(""));
                   inputRef.current?.focus({ preventScroll: true });
                 }}
@@ -1614,7 +1686,7 @@ function Fold({
   children: React.ReactNode;
 }) {
   return (
-    <section className={`mm-fold${open ? "is-open" : ""}`}>
+    <section className={`mm-fold${open ? " is-open" : ""}`}>
       <button
         type="button"
         className="mm-fold__toggle"
