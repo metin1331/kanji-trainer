@@ -47,7 +47,7 @@ import { MnemonicText } from "./MnemonicText";
 import { MojiMoriLayout } from "./MojiMoriLayout";
 import { SubjectTile, SubjectTileGrid } from "./SubjectTile";
 import { audioTracks, pickVoice } from "./mojiVoice";
-import { KanjiStrokeQuiz } from "./KanjiStrokeQuiz";
+import { KanjiReview, KanjiStrokeQuiz, WordReveal } from "./KanjiStrokeQuiz";
 
 type Prompt = "meaning" | "reading" | "word";
 type Task = { subjectId: number; prompt: Prompt; retry: boolean };
@@ -68,7 +68,7 @@ function parkMiss(tasks: Task[], missed: Task): Task[] {
   }
   return later;
 }
-type Attempt = { answer: string; correct: boolean };
+type Attempt = { answer: string; correct: boolean; reveal?: boolean };
 type ItemRecord = {
   meaning?: Attempt;
   reading?: Attempt;
@@ -302,8 +302,11 @@ export function MojiMoriReviewSession({
   const [kanaTab, setKanaTab] = useState("a");
   const [playing, setPlaying] = useState<string | null>(null);
   const [wordMethod, setWordMethod] = useState<"meaning" | "kanji">("kanji");
-  const [wordHint, setWordHint] = useState(false);
+  const [wordHint, setWordHint] = useState(0);
+  const [spellingHint, setSpellingHint] = useState(false);
   const [strokeIndex, setStrokeIndex] = useState(0);
+  const [drawn, setDrawn] = useState(0);
+  const [wordBoard, setWordBoard] = useState(false);
   const [drawTry, setDrawTry] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const goRef = useRef<HTMLButtonElement>(null);
@@ -550,8 +553,11 @@ export function MojiMoriReviewSession({
     setInfoWanted(false);
     setInfoDenied(false);
     setWordMethod("kanji");
-    setWordHint(false);
+    setWordHint(0);
+    setSpellingHint(false);
     setStrokeIndex(0);
+    setDrawn(0);
+    setWordBoard(false);
     setDrawTry(0);
   }
 
@@ -632,7 +638,7 @@ export function MojiMoriReviewSession({
     });
   }
 
-  function submitAnswer(word?: { answer: string; method: "meaning" | "kanji" }) {
+  function submitAnswer(word?: { answer: string; method: "meaning" | "kanji"; reveal?: boolean }) {
     if (!current || !card) return;
     if (pending) {
       advance();
@@ -649,16 +655,19 @@ export function MojiMoriReviewSession({
       return;
     }
     setNotice("");
+    const gradedWord = word?.reveal ? "\u00d7" : submitted;
     const checked = checkStudyCard(
       card,
       current.prompt,
-      submitted,
+      gradedWord,
       word?.method ?? "meaning",
     );
     if (checked.homophone) {
       toast(t("mojimori.study.homophone"));
       if (word?.method === "kanji") {
         setStrokeIndex(0);
+        setDrawn(0);
+        setWordBoard(false);
         setDrawTry((value) => value + 1);
       } else {
         pulseShake();
@@ -681,13 +690,20 @@ export function MojiMoriReviewSession({
     const prev = recordsRef.current[card.id] ?? {};
     const first = !prev[current.prompt];
     const next: ItemRecord = { ...prev };
-    if (first) next[current.prompt] = { answer: submitted, correct: checked.correct };
+    if (first) {
+      next[current.prompt] = {
+        answer: submitted,
+        correct: checked.correct,
+        reveal: word?.reveal,
+      };
+    }
+    const storedWord = next.word?.reveal ? "\u00d7" : next.word?.answer;
     if (first && card.prompts.every((prompt) => next[prompt]) && !next.grade) {
       studyFlush.queue({
         subjectId: card.id,
         meaning: next.meaning?.answer,
         reading: next.reading?.answer,
-        word: next.word?.answer,
+        word: storedWord,
         expectedStage: card.srsStage ?? 0,
       });
       if (source !== "extra") {
@@ -695,7 +711,7 @@ export function MojiMoriReviewSession({
           predictReviewGrade(card, {
             meaning: next.meaning?.answer,
             reading: next.reading?.answer,
-            word: next.word?.answer,
+            word: storedWord,
           }) ?? undefined;
       }
     }
@@ -819,13 +835,15 @@ export function MojiMoriReviewSession({
           ? t("mojimori.study.wordWord")
           : t("mojimori.study.readingWord");
     const wordKanji = card.wordKanji ?? [];
-    const wordDraw =
+    const showBoard =
       current.prompt === "word" &&
       wordMethod === "kanji" &&
-      mode === "ask" &&
-      pending == null &&
-      wordKanji.length > 0;
-    const showWordMeaning = current.prompt === "word" && wordHint;
+      wordKanji.length > 0 &&
+      (wordBoard || (mode === "ask" && pending == null));
+    const showWordMeaning =
+      current.prompt === "word" && wordMethod === "kanji" && wordHint > 0;
+    const showWordSpelling =
+      current.prompt === "word" && wordMethod === "meaning" && spellingHint;
     const audioEnabled = current.prompt === "reading" && tracks.length > 0;
     const infoAnswered =
       mode === "miss" || Boolean(records[card.id]?.[current.prompt]);
@@ -888,6 +906,11 @@ export function MojiMoriReviewSession({
             {showWordMeaning && card.wordMeaning ? (
               <p className="mm-quiz__word-meaning">{card.wordMeaning}</p>
             ) : null}
+            {showWordSpelling && card.characters ? (
+              <p className="mm-quiz__word-spelling" lang="ja">
+                {card.characters}
+              </p>
+            ) : null}
           </div>
           <div className="mm-quiz__stage-footer">
             <AnimatePresence>
@@ -931,6 +954,7 @@ export function MojiMoriReviewSession({
               <button
                 type="button"
                 className={wordMethod === "meaning" ? "is-on" : ""}
+                disabled={wordHint > 0}
                 onClick={() => setWordMethod("meaning")}
               >
                 {t("mojimori.study.wordMeaningMethod")}
@@ -938,44 +962,93 @@ export function MojiMoriReviewSession({
               <button
                 type="button"
                 className={wordMethod === "kanji" ? "is-on" : ""}
-                disabled={wordKanji.length === 0}
+                disabled={wordKanji.length === 0 || spellingHint}
                 onClick={() => setWordMethod("kanji")}
               >
                 {t("mojimori.study.wordDrawMethod")}
               </button>
               <button
                 type="button"
-                className={wordHint ? "is-on" : ""}
-                onClick={() => setWordHint(true)}
+                className={wordHint > 0 || spellingHint ? "is-on" : ""}
+                onClick={() => {
+                  if (wordMethod === "meaning") {
+                    setSpellingHint(true);
+                    return;
+                  }
+                  if (wordHint < 1) {
+                    setWordHint(1);
+                    return;
+                  }
+                  if (wordBoard || !card) return;
+                  setWordBoard(true);
+                  submitAnswer({
+                    answer: card.characters || wordKanji.join(""),
+                    method: "kanji",
+                    reveal: true,
+                  });
+                }}
               >
-                {t("mojimori.study.wordHint")}
+                {wordMethod === "meaning"
+                  ? t("mojimori.study.wordHint")
+                  : wordHint > 0
+                    ? t("mojimori.study.wordHint2")
+                    : t("mojimori.study.wordHint1")}
               </button>
             </div>
           ) : null}
-          {wordDraw ? (
+          {showBoard ? (
             <div className="mm-word">
-              <p className="mm-word__progress">
-                {t("mojimori.study.wordProgress", {
-                  current: Math.min(strokeIndex + 1, wordKanji.length),
-                  total: wordKanji.length,
-                })}
-              </p>
-              <KanjiStrokeQuiz
-                key={`${card.id}-${strokeIndex}-${drawTry}`}
-                character={wordKanji[strokeIndex] ?? ""}
-                unsupported={t("mojimori.study.wordUnsupported")}
-                onDone={() => {
-                  const next = strokeIndex + 1;
-                  if (next >= wordKanji.length) {
-                    void submitAnswer({
-                      answer: wordKanji.join(""),
-                      method: "kanji",
-                    });
-                    return;
-                  }
-                  setStrokeIndex(next);
-                }}
-              />
+              {wordBoard ? (
+                <WordReveal
+                  characters={card.characters || wordKanji.join("")}
+                  kanji={wordKanji}
+                  advanceLabel={t("mojimori.study.next")}
+                  onAdvance={advance}
+                />
+              ) : (
+                <>
+                  <div className="mm-word__steps">
+                    {wordKanji.map((_, index) => (
+                      <span key={index}>
+                        {index > 0 ? <span>/</span> : null}
+                        <button
+                          type="button"
+                          className={index === strokeIndex ? "is-on" : ""}
+                          disabled={index > drawn}
+                          onClick={() => setStrokeIndex(index)}
+                        >
+                          {index + 1}
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                  {strokeIndex < drawn ? (
+                    <KanjiReview
+                      key={`${card.id}-done-${strokeIndex}`}
+                      character={wordKanji[strokeIndex] ?? ""}
+                    />
+                  ) : (
+                    <KanjiStrokeQuiz
+                      key={`${card.id}-${strokeIndex}-${drawTry}`}
+                      character={wordKanji[strokeIndex] ?? ""}
+                      unsupported={t("mojimori.study.wordUnsupported")}
+                      onDone={() => {
+                        const next = strokeIndex + 1;
+                        setDrawn(next);
+                        if (next >= wordKanji.length) {
+                          setWordBoard(true);
+                          submitAnswer({
+                            answer: wordKanji.join(""),
+                            method: "kanji",
+                          });
+                          return;
+                        }
+                        setStrokeIndex(next);
+                      }}
+                    />
+                  )}
+                </>
+              )}
             </div>
           ) : (
           <div

@@ -2522,6 +2522,13 @@ button.forecast-row {
   text-align: center;
 }
 
+.mm-quiz__word-spelling {
+  margin: 0;
+  font-size: clamp(2rem, 7vw, 3rem);
+  font-weight: 500;
+  line-height: 1.1;
+}
+
 .mm-word {
   display: grid;
   justify-items: center;
@@ -2573,17 +2580,119 @@ button.forecast-row {
   animation: moji-shake 220ms ease;
 }
 
-.mm-word__surface {
+.mm-word__pad .mm-word__surface,
+.mm-word__cell .mm-word__surface {
+  position: absolute;
+  inset: 0;
+  display: block;
   width: 100%;
   height: 100%;
   touch-action: none;
 }
 
-.mm-word__surface svg {
-  display: block;
-  width: 100%;
-  height: 100%;
-  touch-action: none;
+.mm-word__steps {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  font-size: 0.92rem;
+  font-weight: 650;
+}
+
+.mm-word__steps button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 650;
+  padding: 0 0.12rem;
+  cursor: pointer;
+}
+
+.mm-word__steps button.is-on {
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+}
+
+.mm-word__steps button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.mm-word__board {
+  position: relative;
+  width: min(100%, 40rem);
+  border: 1px solid var(--color-line);
+  border-radius: 12px;
+  background: white;
+  padding: 2.5rem 3rem 2.7rem 0.85rem;
+}
+
+.mm-word__spell {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+}
+
+.mm-word__cell {
+  position: relative;
+  width: min(16rem, 70vw);
+  aspect-ratio: 1;
+}
+
+.mm-word__cell:not(:only-child) {
+  width: min(7.5rem, 28vw);
+}
+
+.mm-word__cell:not(:first-child) {
+  margin-left: -2.25rem;
+}
+
+.mm-word__kana {
+  font-size: clamp(1.8rem, 6vw, 2.6rem);
+  font-weight: 500;
+  line-height: 1;
+}
+
+.mm-word__meta {
+  position: absolute;
+  top: 0.45rem;
+  right: 0.45rem;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.4rem;
+  max-width: calc(100% - 0.9rem);
+  font-size: 0.78rem;
+  font-weight: 650;
+}
+
+.mm-word__replay,
+.mm-word__next {
+  display: grid;
+  place-items: center;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+}
+
+.mm-word__replay {
+  width: 1.85rem;
+  height: 1.85rem;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.mm-word__next {
+  position: absolute;
+  right: 0.65rem;
+  bottom: 0.65rem;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 10px;
+  background: var(--color-text-black-secondary);
+  color: #f4f7fb;
 }
 
 .mm-word__missing {
@@ -2608,10 +2717,16 @@ button.forecast-row {
 
 .dark .moji-mori .mm-word__methods button,
 .dark .moji-mori .mm-word__pad,
+.dark .moji-mori .mm-word__board,
 .dark .moji-mori .mm-word__missing {
   background: #10151f;
   color: #f4f7fb;
   border-color: rgba(255, 255, 255, 0.12);
+}
+
+.dark .moji-mori .mm-word__replay {
+  background: rgba(255, 255, 255, 0.08);
+  color: #f4f7fb;
 }
 
 .dark .moji-mori .mm-word__methods button.is-on {
@@ -2665,7 +2780,7 @@ button.forecast-row {
 }
   .mm-quiz__stage {
     min-height: 10rem;
-    padding: 1.15rem 1rem 0;
+    padding: 2.15rem 1rem 0;
   } 
 }
 
