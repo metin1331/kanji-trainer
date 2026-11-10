@@ -69,6 +69,22 @@ describe("grading", () => {
     assert.equal(shake.wantedType, "onyomi");
   });
 
+  it("warns when a listed reading of the other type is not accepted", () => {
+    const left = [
+      { reading: "さ", primary: true, acceptedAnswer: true, type: "onyomi" },
+      { reading: "ひだり", primary: false, acceptedAnswer: false, type: "kunyomi" },
+    ];
+    const checked = checkPrompt("kanji", meanings, left, "reading", "ひだり");
+    assert.equal(checked.correct, false);
+    assert.equal(checked.shake, true);
+    assert.equal(checked.wantedType, "onyomi");
+    assert.equal(checked.enteredType, "kunyomi");
+    const graded = gradeAnswers("kanji", meanings, left, "left", "ひだり");
+    assert.equal(graded.shake, true);
+    assert.equal(graded.readingCorrect, false);
+    assert.equal(graded.passed, false);
+  });
+
   it("asks radicals for the name only", () => {
     const graded = gradeAnswers("radical", meanings, [], "Ground", undefined);
     assert.equal(graded.passed, true);

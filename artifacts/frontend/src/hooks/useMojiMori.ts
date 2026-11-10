@@ -370,6 +370,7 @@ export type MojiMoriSettings = {
   lessonsAutoplay: boolean;
   reviewsAutoplay: boolean;
   extraStudyAutoplay: boolean;
+  drawingCardsLast: boolean;
   itemCount: number;
 };
 

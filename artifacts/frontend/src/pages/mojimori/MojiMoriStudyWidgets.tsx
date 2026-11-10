@@ -2,10 +2,18 @@ import { useEffect, useMemo, useState } from "react";
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Link } from "wouter";
-import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from "@/components/ui/chart";
 import { useTranslation } from "../../i18n/I18nProvider";
-import type { MojiMoriStudySnapshot, MojiMoriSubjectSummary } from "../../lib/mojiMori";
-import { TodaysLessonsWidget } from "./TodaysLessonsWidget";
+import type {
+  MojiMoriStudySnapshot,
+  MojiMoriSubjectSummary,
+} from "../../lib/mojiMori";
+import { TodaysLessonsWidget, TypeMix } from "./TodaysLessonsWidget";
 import { LevelSubjectCard } from "./SubjectTile";
 
 function heatLevel(count: number) {
@@ -16,7 +24,11 @@ function heatLevel(count: number) {
   return 4;
 }
 
-export function MojiMoriStudyWidgets({ study }: { study: MojiMoriStudySnapshot }) {
+export function MojiMoriStudyWidgets({
+  study,
+}: {
+  study: MojiMoriStudySnapshot;
+}) {
   const { t } = useTranslation();
   const [lockedDate, setLockedDate] = useState<string | null>(null);
 
@@ -24,27 +36,48 @@ export function MojiMoriStudyWidgets({ study }: { study: MojiMoriStudySnapshot }
     <div className="space-y-5">
       <section className="grid gap-3 sm:grid-cols-2">
         <TodaysLessonsWidget lessons={study.lessons} />
-        <div className="glass-panel p-5">
-          <h2 className="text-lg sm:text-base font-semibold">{t("mojimori.study.reviewsTitle")}</h2>
-          <p className="mt-2 text-3xl font-semibold">{study.reviews.due}</p>
-          <p className="text-sm text-[var(--color-muted)]">
-            {t("mojimori.study.apprenticeDue", { count: study.reviews.apprenticeDue })}
+        <div className="glass-panel moji-reviews-widget p-5">
+          <h2 className="text-lg font-semibold sm:text-base">
+            {t("mojimori.study.reviewsTitle")}
+          </h2>
+          <div className="pt-3"></div>
+          <div className="moji-queue-count">
+            <p className="moji-reviews-widget__count">{study.reviews.due}</p>
+            <TypeMix counts={study.reviews.byType} />
+          </div>
+          <p className="pt-0.5 text-sm text-[var(--color-muted)]">
+            {t("mojimori.study.apprenticeDue", {
+              count: study.reviews.apprenticeDue,
+            })}
           </p>
-          <Link href="/mojimori/reviews" className="moji-btn-primary mt-3">
-            {t("mojimori.study.startReviews")}
-          </Link>
+          <div className="moji-reviews-widget__actions">
+            <Link href="/mojimori/reviews" className="moji-btn-primary">
+              {t("mojimori.study.startReviews")}
+            </Link>
+            <button type="button" className="hidden! moji-btn">
+              Review ordering
+            </button>
+          </div>
         </div>
       </section>
 
-      
       <section className="glass-panel p-5">
-        <h2 className="mb-3 text-lg sm:text-base font-semibold">{t("mojimori.study.extraTitle")}</h2>
+        <h2 className="mb-3 text-lg font-semibold sm:text-base">
+          {t("mojimori.study.extraTitle")}
+        </h2>
         <div className="flex flex-wrap gap-2">
           <Link href="/mojimori/extra?mode=recent-lessons" className="moji-btn">
-            {t("mojimori.study.recentLessons", { count: study.extra.recentLessons })}
+            {t("mojimori.study.recentLessons", {
+              count: study.extra.recentLessons,
+            })}
           </Link>
-          <Link href="/mojimori/extra?mode=recent-mistakes" className="moji-btn">
-            {t("mojimori.study.recentMistakes", { count: study.extra.recentMistakes })}
+          <Link
+            href="/mojimori/extra?mode=recent-mistakes"
+            className="moji-btn"
+          >
+            {t("mojimori.study.recentMistakes", {
+              count: study.extra.recentMistakes,
+            })}
           </Link>
           <Link href="/mojimori/extra?mode=cooked" className="moji-btn">
             {t("mojimori.study.cookedItems", { count: study.extra.cooked })}
@@ -52,10 +85,16 @@ export function MojiMoriStudyWidgets({ study }: { study: MojiMoriStudySnapshot }
         </div>
         {study.mistakes.length > 0 ? (
           <div className="mt-4">
-            <h3 className="mb-2 text-sm font-medium">{t("mojimori.study.mistakes")}</h3>
+            <h3 className="mb-2 text-sm font-medium">
+              {t("mojimori.study.mistakes")}
+            </h3>
             <div className="mistake-row">
               {study.mistakes.map((item) => (
-                <LevelSubjectCard key={item.subjectId} subject={mistakeCard(item)} caption={false} />
+                <LevelSubjectCard
+                  key={item.subjectId}
+                  subject={mistakeCard(item)}
+                  caption={false}
+                />
               ))}
             </div>
           </div>
@@ -67,7 +106,9 @@ export function MojiMoriStudyWidgets({ study }: { study: MojiMoriStudySnapshot }
       <ReviewStats study={study} />
 
       <section className="glass-panel p-5">
-        <h2 className="mb-3 text-lg sm:text-base font-semibold">{t("mojimori.study.heatmap")}</h2>
+        <h2 className="mb-3 text-lg font-semibold sm:text-base">
+          {t("mojimori.study.heatmap")}
+        </h2>
         <div className="overflow-x-auto">
           <div className="moji-heat">
             {study.heatmap.map((cell) => (
@@ -84,9 +125,17 @@ export function MojiMoriStudyWidgets({ study }: { study: MojiMoriStudySnapshot }
       </section>
 
       <section className="glass-panel p-5">
-        <h2 className="mb-3 text-lg sm:text-base font-semibold">{t("mojimori.study.lists")}</h2>
-        <ListColumn title={t("mojimori.study.cooked30")} items={study.lists.cooked} />
-        <ListColumn title={t("mojimori.study.unlocked30")} items={study.lists.unlocked} />
+        <h2 className="mb-3 text-lg font-semibold sm:text-base">
+          {t("mojimori.study.lists")}
+        </h2>
+        <ListColumn
+          title={t("mojimori.study.cooked30")}
+          items={study.lists.cooked}
+        />
+        <ListColumn
+          title={t("mojimori.study.unlocked30")}
+          items={study.lists.unlocked}
+        />
         <ListColumn
           title={t("mojimori.study.critical")}
           items={study.lists.critical.map((item) => ({
@@ -97,7 +146,9 @@ export function MojiMoriStudyWidgets({ study }: { study: MojiMoriStudySnapshot }
       </section>
 
       <section className="glass-panel p-5">
-        <h2 className="text-lg sm:text-base font-semibold">{t("mojimori.study.streak")}</h2>
+        <h2 className="text-lg font-semibold sm:text-base">
+          {t("mojimori.study.streak")}
+        </h2>
         <p className="mt-2 text-sm">
           {t("mojimori.study.streakNow", {
             current: study.streak.current,
@@ -116,16 +167,23 @@ function localeTag(locale: string) {
 
 function dayLabel(date: string, locale: string) {
   const [year, month, day] = date.split("-").map(Number);
-  return new Date(year, (month ?? 1) - 1, day ?? 1).toLocaleDateString(localeTag(locale), {
-    weekday: "short",
-  });
+  return new Date(year, (month ?? 1) - 1, day ?? 1).toLocaleDateString(
+    localeTag(locale),
+    {
+      weekday: "short",
+    },
+  );
 }
 
 function hourLabel(iso: string, locale: string) {
-  return new Date(iso).toLocaleTimeString(localeTag(locale), { hour: "numeric" });
+  return new Date(iso).toLocaleTimeString(localeTag(locale), {
+    hour: "numeric",
+  });
 }
 
-function mistakeCard(item: MojiMoriStudySnapshot["mistakes"][number]): MojiMoriSubjectSummary {
+function mistakeCard(
+  item: MojiMoriStudySnapshot["mistakes"][number],
+): MojiMoriSubjectSummary {
   const stage = item.srsStage;
   return {
     id: item.subjectId,
@@ -138,14 +196,25 @@ function mistakeCard(item: MojiMoriStudySnapshot["mistakes"][number]): MojiMoriS
     characterImages: item.characterImages,
     lessonPosition: item.lessonPosition,
     progress: {
-      status: stage >= 13 ? "burned" : stage >= 5 ? "guru" : stage > 0 ? "review" : "locked",
+      status:
+        stage >= 13
+          ? "burned"
+          : stage >= 5
+            ? "guru"
+            : stage > 0
+              ? "review"
+              : "locked",
       srsStage: stage,
       passed: stage >= 5,
     },
   };
 }
 
-function ForecastPanel({ forecast }: { forecast: MojiMoriStudySnapshot["forecast"] }) {
+function ForecastPanel({
+  forecast,
+}: {
+  forecast: MojiMoriStudySnapshot["forecast"];
+}) {
   const { t, locale } = useTranslation();
   const [dayKey, setDayKey] = useState<string | null>(null);
   const [phase, setPhase] = useState<"closed" | "open" | "closing">("closed");
@@ -222,7 +291,7 @@ function ForecastPanel({ forecast }: { forecast: MojiMoriStudySnapshot["forecast
             <span className="forecast-day">{dayLabel(day.date, locale)}</span>
             <span className="forecast-track">
               <span
-                className={`forecast-bar${day.count === 0 ? " is-empty" : ""}`}
+                className={`forecast-bar${day.count === 0 ? "is-empty" : ""}`}
                 style={
                   day.count === 0
                     ? undefined
@@ -244,20 +313,27 @@ function ForecastPanel({ forecast }: { forecast: MojiMoriStudySnapshot["forecast
               {dayLabel(selected.date, locale)}
             </button>
             <span className="font-semibold">
-              <span className="forecast-plus">(+{selected.count})</span> {selected.cumulative}
+              <span className="forecast-plus">(+{selected.count})</span>{" "}
+              {selected.cumulative}
             </span>
           </div>
           <div className="min-h-0 flex-1 overflow-auto">
             {hours.length === 0 ? (
-              <p className="text-sm text-[var(--color-muted)]">{t("mojimori.study.none")}</p>
+              <p className="text-sm text-[var(--color-muted)]">
+                {t("mojimori.study.none")}
+              </p>
             ) : (
               hours.map((hour) => (
                 <div key={hour.at} className="forecast-row">
-                  <span className="forecast-day">{hourLabel(hour.at, locale)}</span>
+                  <span className="forecast-day">
+                    {hourLabel(hour.at, locale)}
+                  </span>
                   <span className="forecast-track">
                     <span
                       className="forecast-bar"
-                      style={{ width: `${Math.max(6, (hour.count / hourPeak) * 100)}%` }}
+                      style={{
+                        width: `${Math.max(6, (hour.count / hourPeak) * 100)}%`,
+                      }}
                     />
                   </span>
                   <span className="forecast-plus">(+{hour.count})</span>
@@ -276,7 +352,13 @@ function statOf(
   rows: { key: string; current: number | null; previous: number | null }[],
   key: string,
 ) {
-  return rows.find((row) => row.key === key) ?? { key, current: null, previous: null };
+  return (
+    rows.find((row) => row.key === key) ?? {
+      key,
+      current: null,
+      previous: null,
+    }
+  );
 }
 
 function percentText(value: number | null) {
@@ -314,12 +396,18 @@ function chartRows(
       ? Array.from({ length: 12 }, (_, month) => {
           const matched = days.filter((day) => {
             const date = parseDay(day.date);
-            return date.getFullYear() === today.getFullYear() && date.getMonth() === month;
+            return (
+              date.getFullYear() === today.getFullYear() &&
+              date.getMonth() === month
+            );
           });
           const count = matched.reduce((sum, day) => sum + day.count, 0);
           const correct = matched.reduce((sum, day) => sum + day.correct, 0);
           return {
-            label: new Date(today.getFullYear(), month, 1).toLocaleDateString(tag, { month: "short" }),
+            label: new Date(today.getFullYear(), month, 1).toLocaleDateString(
+              tag,
+              { month: "short" },
+            ),
             count,
             correct,
           };
@@ -361,7 +449,11 @@ function ReviewStats({ study }: { study: MojiMoriStudySnapshot }) {
   );
   const chartConfig = {
     value: {
-      label: t(metric === "percent" ? "mojimori.study.accuracy" : "mojimori.study.completed"),
+      label: t(
+        metric === "percent"
+          ? "mojimori.study.accuracy"
+          : "mojimori.study.completed",
+      ),
       color: "var(--color-azure)",
     },
   } satisfies ChartConfig;
@@ -409,21 +501,35 @@ function ReviewStats({ study }: { study: MojiMoriStudySnapshot }) {
           <h2>{t("mojimori.study.accuracy")}</h2>
           <p className="review-stat__value">{percentText(week.current)}</p>
           <p className="review-stat__label">{t("mojimori.study.past7Days")}</p>
-          <p className="review-stat__compare">{t("mojimori.study.previousPeriod")}</p>
+          <p className="review-stat__compare">
+            {t("mojimori.study.previousPeriod")}
+          </p>
           <p className="review-stat__previous">{percentText(week.previous)}</p>
-          <button type="button" className="moji-btn" onClick={() => open("percent")}>
+          <button
+            type="button"
+            className="moji-btn"
+            onClick={() => open("percent")}
+          >
             {t("mojimori.study.details")}
           </button>
         </article>
         <article className="review-stat">
           <h2>{t("mojimori.study.completed")}</h2>
           <p className="review-stat__value">{today.current ?? "–"}</p>
-          <p className="review-stat__label">{t("mojimori.study.period.today")}</p>
-          <p className="review-stat__compare">{t("mojimori.study.yesterday")}</p>
+          <p className="review-stat__label">
+            {t("mojimori.study.period.today")}
+          </p>
+          <p className="review-stat__compare">
+            {t("mojimori.study.yesterday")}
+          </p>
           <p className="review-stat__previous">
             {t("mojimori.study.reviewsCount", { count: today.previous ?? 0 })}
           </p>
-          <button type="button" className="moji-btn" onClick={() => open("count")}>
+          <button
+            type="button"
+            className="moji-btn"
+            onClick={() => open("count")}
+          >
             {t("mojimori.study.details")}
           </button>
         </article>
@@ -440,7 +546,7 @@ function ReviewStats({ study }: { study: MojiMoriStudySnapshot }) {
                 <button
                   key={key}
                   type="button"
-                  className={`moji-btn${range === key ? " is-on" : ""}`}
+                  className={`moji-btn${range === key ? "is-on" : ""}`}
                   aria-pressed={range === key}
                   onClick={() => setRange(key)}
                 >
@@ -449,10 +555,21 @@ function ReviewStats({ study }: { study: MojiMoriStudySnapshot }) {
               ))}
             </div>
           </div>
-          <ChartContainer config={chartConfig} className="review-chart aspect-auto">
-            <BarChart data={rows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+          <ChartContainer
+            config={chartConfig}
+            className="review-chart aspect-auto"
+          >
+            <BarChart
+              data={rows}
+              margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
+            >
               <CartesianGrid vertical={false} />
-              <XAxis dataKey="label" tickLine={false} axisLine={false} interval={range === "month" ? 4 : 0} />
+              <XAxis
+                dataKey="label"
+                tickLine={false}
+                axisLine={false}
+                interval={range === "month" ? 4 : 0}
+              />
               <YAxis
                 tickLine={false}
                 axisLine={false}
@@ -471,7 +588,11 @@ function ReviewStats({ study }: { study: MojiMoriStudySnapshot }) {
                   />
                 }
               />
-              <Bar dataKey="value" fill="var(--color-value)" radius={[3, 3, 0, 0]} />
+              <Bar
+                dataKey="value"
+                fill="var(--color-value)"
+                radius={[3, 3, 0, 0]}
+              />
             </BarChart>
           </ChartContainer>
         </div>

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { RefreshCw } from "lucide-react";
+import { ChevronDown, RefreshCw } from "lucide-react";
 import { MojiMoriLoading } from "./MojiMoriLoading";
 import { useTranslation } from "../../i18n/I18nProvider";
 import {
@@ -44,17 +44,11 @@ export function MojiMoriSettingsPage() {
               label={t("mojimori.settings.batch")}
               description={t("mojimori.settings.batchHelp")}
             >
-              <select
-                className="moji-user-field"
-                value={data.lessonBatchSize}
-                onChange={(event) => save({ lessonBatchSize: Number(event.target.value) })}
-              >
-                {BATCHES.map((size) => (
-                  <option key={size} value={size}>
-                    {size}
-                  </option>
-                ))}
-              </select>
+              <FieldSelect
+                value={String(data.lessonBatchSize)}
+                onChange={(value) => save({ lessonBatchSize: Number(value) })}
+                options={BATCHES.map((size) => ({ value: String(size), label: String(size) }))}
+              />
             </Setting>
             <Setting
               label={t("mojimori.settings.cap")}
@@ -73,6 +67,10 @@ export function MojiMoriSettingsPage() {
                 onChange={(interleaveLessons) => save({ interleaveLessons })}
               />
             </Setting>
+            <DrawingLast
+              value={data.drawingCardsLast}
+              onChange={(drawingCardsLast) => save({ drawingCardsLast })}
+            />
           </section>
 
           <section className="glass-panel moji-settings__panel">
@@ -102,17 +100,21 @@ export function MojiMoriSettingsPage() {
                 </>
               }
             >
-              <select
-                className="moji-user-field"
+              <FieldSelect
                 value={data.reviewOrder}
-                onChange={(event) => save({ reviewOrder: event.target.value })}
-              >
-                <option value="shuffled">{t("mojimori.study.orderShuffled")}</option>
-                <option value="apprentice">{t("mojimori.study.orderApprentice")}</option>
-                <option value="lower-stage">{t("mojimori.study.orderStage")}</option>
-                <option value="lower-level">{t("mojimori.study.orderLevel")}</option>
-              </select>
+                onChange={(reviewOrder) => save({ reviewOrder })}
+                options={[
+                  { value: "shuffled", label: t("mojimori.study.orderShuffled") },
+                  { value: "apprentice", label: t("mojimori.study.orderApprentice") },
+                  { value: "lower-stage", label: t("mojimori.study.orderStage") },
+                  { value: "lower-level", label: t("mojimori.study.orderLevel") },
+                ]}
+              />
             </Setting>
+            <DrawingLast
+              value={data.drawingCardsLast}
+              onChange={(drawingCardsLast) => save({ drawingCardsLast })}
+            />
           </section>
 
           <section className="glass-panel moji-settings__panel">
@@ -121,17 +123,17 @@ export function MojiMoriSettingsPage() {
               label={t("mojimori.settings.voice")}
               description={t("mojimori.settings.voiceHelp")}
             >
-              <select
-                className="moji-user-field"
+              <FieldSelect
                 value={data.preferredVoice}
-                onChange={(event) => save({ preferredVoice: event.target.value })}
-              >
-                <option value="female_only">{t("mojimori.settings.voiceFemale")}</option>
-                <option value="male_only">{t("mojimori.settings.voiceMale")}</option>
-                <option value="female_preferred">{t("mojimori.settings.voiceFemaleFirst")}</option>
-                <option value="male_preferred">{t("mojimori.settings.voiceMaleFirst")}</option>
-                <option value="random">{t("mojimori.settings.voiceRandom")}</option>
-              </select>
+                onChange={(preferredVoice) => save({ preferredVoice })}
+                options={[
+                  { value: "female_only", label: t("mojimori.settings.voiceFemale") },
+                  { value: "male_only", label: t("mojimori.settings.voiceMale") },
+                  { value: "female_preferred", label: t("mojimori.settings.voiceFemaleFirst") },
+                  { value: "male_preferred", label: t("mojimori.settings.voiceMaleFirst") },
+                  { value: "random", label: t("mojimori.settings.voiceRandom") },
+                ]}
+              />
             </Setting>
             <Setting
               label={t("mojimori.settings.lessonAudio")}
@@ -211,6 +213,31 @@ function Setting({
   );
 }
 
+function DrawingLast({
+  value,
+  onChange,
+}: {
+  value: boolean;
+  onChange: (value: boolean) => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <Setting
+      label={t("mojimori.settings.drawingLast")}
+      description={t("mojimori.settings.drawingLastHelp")}
+    >
+      <FieldSelect
+        value={value ? "true" : "false"}
+        onChange={(next) => onChange(next === "true")}
+        options={[
+          { value: "false", label: t("mojimori.settings.no") },
+          { value: "true", label: t("mojimori.settings.yes") },
+        ]}
+      />
+    </Setting>
+  );
+}
+
 function YesNo({
   value,
   yes,
@@ -223,14 +250,121 @@ function YesNo({
   onChange: (value: boolean) => void;
 }) {
   return (
-    <select
-      className="moji-user-field"
+    <FieldSelect
       value={value ? "true" : "false"}
-      onChange={(event) => onChange(event.target.value === "true")}
-    >
-      <option value="true">{yes}</option>
-      <option value="false">{no}</option>
-    </select>
+      onChange={(next) => onChange(next === "true")}
+      options={[
+        { value: "true", label: yes },
+        { value: "false", label: no },
+      ]}
+    />
+  );
+}
+
+function useDesktopMenu() {
+  const [desktop, setDesktop] = useState(() =>
+    window.matchMedia("(hover: hover) and (pointer: fine)").matches,
+  );
+  useEffect(() => {
+    const media = window.matchMedia("(hover: hover) and (pointer: fine)");
+    const sync = () => setDesktop(media.matches);
+    sync();
+    media.addEventListener("change", sync);
+    return () => media.removeEventListener("change", sync);
+  }, []);
+  return desktop;
+}
+
+function FieldSelect({
+  value,
+  onChange,
+  options,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
+}) {
+  const desktop = useDesktopMenu();
+  if (!desktop) {
+    return (
+      <select
+        className="moji-user-field"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    );
+  }
+  return <DesktopSelect value={value} onChange={onChange} options={options} />;
+}
+
+function DesktopSelect({
+  value,
+  onChange,
+  options,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
+}) {
+  const [open, setOpen] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
+  const current = options.find((option) => option.value === value) ?? options[0];
+
+  useEffect(() => {
+    if (!open) return;
+    function onPointer(event: PointerEvent) {
+      if (!root.current?.contains(event.target as Node)) setOpen(false);
+    }
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("pointerdown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <div ref={root} className={`moji-user-picker${open ? " is-open" : ""}`}>
+      <button
+        type="button"
+        className="moji-user-field moji-user-field--menu"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => setOpen((shown) => !shown)}
+      >
+        <span>{current?.label}</span>
+        <ChevronDown size={16} aria-hidden="true" />
+      </button>
+      {open ? (
+        <ul className="moji-user-menu" role="listbox">
+          {options.map((option) => (
+            <li key={option.value} role="presentation">
+              <button
+                type="button"
+                role="option"
+                aria-selected={option.value === value}
+                className={option.value === value ? "is-on" : undefined}
+                onClick={() => {
+                  onChange(option.value);
+                  setOpen(false);
+                }}
+              >
+                {option.label}
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
   );
 }
 

@@ -443,6 +443,7 @@ export const mojiMoriUsersTable = pgTable("moji_mori_users", {
   lessonsAutoplay: boolean("lessons_autoplay").notNull().default(false),
   reviewsAutoplay: boolean("reviews_autoplay").notNull().default(false),
   extraStudyAutoplay: boolean("extra_study_autoplay").notNull().default(false),
+  drawingCardsLast: boolean("drawing_cards_last").notNull().default(false),
 });
 
 /** Per-user SRS progress. Absent row means the item has not been started. */

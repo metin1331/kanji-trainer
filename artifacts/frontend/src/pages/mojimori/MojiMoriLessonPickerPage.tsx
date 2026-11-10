@@ -149,7 +149,11 @@ export function MojiMoriLessonPickerPage() {
                           onClick={() => toggle(item.id)}
                         >
                           {item.characters ? (
-                            <span className="moji-picker-tile__mark" lang="ja">
+                            <span
+                              className="moji-picker-tile__mark"
+                              lang="ja"
+                              style={{ ["--moji-chars" as string]: String([...item.characters].length) }}
+                            >
                               {item.characters}
                             </span>
                           ) : item.imageUrl ? (

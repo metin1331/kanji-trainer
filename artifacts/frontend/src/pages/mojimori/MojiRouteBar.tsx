@@ -23,7 +23,7 @@ export function MojiRouteBar() {
 
   return (
     <div
-      className="pointer-events-none fixed inset-x-0 top-[3.20rem] min-[960px]:top-0 z-[400] h-1 overflow-hidden"
+      className="moji-route-bar pointer-events-none fixed inset-x-0 top-[3.20rem] min-[960px]:top-0 z-[400] h-1 overflow-hidden"
       role="progressbar"
       aria-label="Loading"
       aria-valuemin={0}

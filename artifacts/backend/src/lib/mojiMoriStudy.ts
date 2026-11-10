@@ -103,6 +103,7 @@ export async function studySettings(userId: number) {
       lessonsAutoplay: mojiMoriUsersTable.lessonsAutoplay,
       reviewsAutoplay: mojiMoriUsersTable.reviewsAutoplay,
       extraStudyAutoplay: mojiMoriUsersTable.extraStudyAutoplay,
+      drawingCardsLast: mojiMoriUsersTable.drawingCardsLast,
       level: mojiMoriUsersTable.level,
     })
     .from(mojiMoriUsersTable)
@@ -128,6 +129,7 @@ export async function studySettings(userId: number) {
     lessonsAutoplay: row?.lessonsAutoplay ?? false,
     reviewsAutoplay: row?.reviewsAutoplay ?? false,
     extraStudyAutoplay: row?.extraStudyAutoplay ?? false,
+    drawingCardsLast: row?.drawingCardsLast ?? false,
     itemCount: Number(counted?.count ?? 0),
   };
 }
@@ -144,6 +146,7 @@ export async function updateStudySettings(userId: number, patch: Record<string, 
     lessonsAutoplay?: boolean;
     reviewsAutoplay?: boolean;
     extraStudyAutoplay?: boolean;
+    drawingCardsLast?: boolean;
   } = {};
   const batch = readInt(patch.lessonBatchSize);
   const cap = readInt(patch.dailyLessonCap);
@@ -152,6 +155,7 @@ export async function updateStudySettings(userId: number, patch: Record<string, 
   const lessonsAutoplay = readBool(patch.lessonsAutoplay);
   const reviewsAutoplay = readBool(patch.reviewsAutoplay);
   const extraStudyAutoplay = readBool(patch.extraStudyAutoplay);
+  const drawingCardsLast = readBool(patch.drawingCardsLast);
   if (batch != null) next.lessonBatchSize = clamp(batch, 3, 10);
   if (cap != null) next.dailyLessonCap = clamp(cap, 0, 100);
   if (interleave != null) next.interleaveLessons = interleave;
@@ -159,6 +163,7 @@ export async function updateStudySettings(userId: number, patch: Record<string, 
   if (lessonsAutoplay != null) next.lessonsAutoplay = lessonsAutoplay;
   if (reviewsAutoplay != null) next.reviewsAutoplay = reviewsAutoplay;
   if (extraStudyAutoplay != null) next.extraStudyAutoplay = extraStudyAutoplay;
+  if (drawingCardsLast != null) next.drawingCardsLast = drawingCardsLast;
   if (
     patch.reviewOrder === "shuffled" ||
     patch.reviewOrder === "apprentice" ||
@@ -1083,11 +1088,26 @@ async function activityBuckets(userId: number): Promise<ActivityBucket[]> {
   }));
 }
 
+function countTypes(items: { objectType: string }[]) {
+  const counts = { radical: 0, kanji: 0, vocabulary: 0 };
+  for (const item of items) {
+    if (item.objectType === "radical" || item.objectType === "kanji" || item.objectType === "vocabulary") {
+      counts[item.objectType] += 1;
+    }
+  }
+  return counts;
+}
+
 export async function studySnapshot(userId: number) {
   const settings = await studySettings(userId);
   const lessons = await lessonCandidates(userId, settings.level);
   const done = await lessonsDoneToday(userId);
   const reviews = await reviewQueue(userId);
+  const lessonLimit =
+    settings.dailyLessonCap === 0
+      ? lessons.length
+      : Math.min(lessons.length, Math.max(0, settings.dailyLessonCap - done));
+  const lessonSlice = (settings.interleaveLessons ? interleave(lessons) : lessons).slice(0, lessonLimit);
   const now = new Date();
   const upcoming = await db
     .select({ availableAt: mojiMoriProgressTable.availableAt })
@@ -1129,8 +1149,13 @@ export async function studySnapshot(userId: number) {
       dailyRemaining:
         settings.dailyLessonCap === 0 ? null : Math.max(0, settings.dailyLessonCap - done),
       batchSize: settings.lessonBatchSize,
+      byType: countTypes(lessonSlice),
     },
-    reviews: { due: reviews.due, apprenticeDue: reviews.apprenticeDue },
+    reviews: {
+      due: reviews.due,
+      apprenticeDue: reviews.apprenticeDue,
+      byType: countTypes(reviews.items),
+    },
     forecast: buildForecast(
       upcoming.map((row) => row.availableAt).filter((at): at is Date => at != null),
       now,

@@ -201,6 +201,12 @@ export type MojiMoriLessonPicker = {
   items: MojiMoriLessonPick[];
 };
 
+export type MojiMoriTypeCounts = {
+  radical: number;
+  kanji: number;
+  vocabulary: number;
+};
+
 export type MojiMoriStudySnapshot = {
   settings: {
     lessonBatchSize: number;
@@ -208,8 +214,13 @@ export type MojiMoriStudySnapshot = {
     interleaveLessons: boolean;
     reviewOrder: string;
   };
-  lessons: { available: number; dailyRemaining: number | null; batchSize: number };
-  reviews: { due: number; apprenticeDue: number };
+  lessons: {
+    available: number;
+    dailyRemaining: number | null;
+    batchSize: number;
+    byType?: MojiMoriTypeCounts;
+  };
+  reviews: { due: number; apprenticeDue: number; byType?: MojiMoriTypeCounts };
   forecast: {
     next24: number;
     days: { date: string; count: number; hours: { at: string; count: number }[] }[];

@@ -32,6 +32,7 @@ export type PromptCheck = {
   correct: boolean;
   shake: boolean;
   wantedType: string | null;
+  enteredType?: string | null;
   multipleMeanings: boolean;
   multipleReadings: boolean;
   lenient: boolean;
@@ -297,8 +298,23 @@ export function checkPrompt(
   const match = acceptedReadings.find(
     (item) => normalizeReading(item.reading) === input,
   );
-  if (match && wantedType && match.type && match.type !== wantedType) {
-    return { ...flags, correct: false, shake: true, wantedType };
+  const keyed = readingKey(answer);
+  const wrongType = readings.find(
+    (item) =>
+      Boolean(item.type) &&
+      Boolean(wantedType) &&
+      item.type !== wantedType &&
+      keyed.length > 0 &&
+      readingKey(item.reading) === keyed,
+  );
+  if (wrongType && (!match || match.type !== wantedType)) {
+    return {
+      ...flags,
+      correct: false,
+      shake: true,
+      wantedType,
+      enteredType: wrongType.type,
+    };
   }
   const unusualSpelling =
     objectType === "vocabulary" &&
@@ -313,7 +329,6 @@ export function checkPrompt(
   if (unusualSpelling) {
     return { ...flags, correct: false, shake: true, wantedType: null, exception: "unusualSpelling" };
   }
-  const keyed = readingKey(answer);
   const usedKanjiReading =
     objectType === "vocabulary" &&
     keyed.length > 0 &&
@@ -361,7 +376,16 @@ export function gradeAnswers(
     const match = readings.find(
       (item) => item.acceptedAnswer && normalizeReading(item.reading) === input,
     );
-    if (match && wantedType && match.type && match.type !== wantedType) {
+    const keyed = readingKey(reading ?? "");
+    const wrongType = readings.find(
+      (item) =>
+        Boolean(item.type) &&
+        Boolean(wantedType) &&
+        item.type !== wantedType &&
+        keyed.length > 0 &&
+        readingKey(item.reading) === keyed,
+    );
+    if (wrongType && (!match || match.type !== wantedType)) {
       shake = true;
       readingCorrect = false;
     } else {

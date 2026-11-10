@@ -144,11 +144,34 @@ export function LevelSubjectCard({
   );
 }
 
-export function SeeAllGrid({ subjects }: { subjects: MojiMoriSubjectSummary[] }) {
+function progressSheetRank(subject: MojiMoriSubjectSummary) {
+  const status = subject.progress?.status ?? "locked";
+  if (status === "lessons") return 1;
+  if (status === "locked") return 2;
+  return 0;
+}
+
+export function SeeAllGrid({
+  subjects,
+  grouped = false,
+}: {
+  subjects: MojiMoriSubjectSummary[];
+  grouped?: boolean;
+}) {
   const [, navigate] = useLocation();
+  const ordered = grouped
+    ? subjects
+        .map((subject, index) => ({
+          subject,
+          index,
+          rank: progressSheetRank(subject),
+        }))
+        .sort((left, right) => left.rank - right.rank || left.index - right.index)
+        .map((item) => item.subject)
+    : subjects;
   return (
-    <div className="flex flex-wrap gap-x-3.5 gap-y-1">
-      {subjects.map((subject) => (
+    <div className={grouped ? "level-sheet__grid" : "flex flex-wrap gap-x-3.5 gap-y-1"}>
+      {ordered.map((subject) => (
         <button
           key={subject.id}
           type="button"
