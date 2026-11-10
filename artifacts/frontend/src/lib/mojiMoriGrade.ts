@@ -60,6 +60,7 @@ export function checkStudyCard(
       answer,
       key.componentReadings,
       key.auxiliaryMeanings,
+      key.componentMeanings ?? [],
     ),
     homophone: false,
   };
@@ -78,6 +79,7 @@ export function predictReviewGrade(
     answers.meaning,
     answers.reading,
     key.auxiliaryMeanings,
+    key.componentMeanings ?? [],
   );
   const wordNeeded = card.prompts.includes("word");
   const scored = applyWordGrade(

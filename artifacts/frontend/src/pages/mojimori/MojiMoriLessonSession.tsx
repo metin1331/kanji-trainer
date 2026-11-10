@@ -37,6 +37,7 @@ import { toast } from "@/components/smoothui/toast";
 import { MnemonicText } from "./MnemonicText";
 import { SubjectCharacter } from "./SubjectCharacter";
 import { visualMode } from "./SubjectTile";
+import { ReviewInfo } from "./MojiMoriReviewSession";
 
 type SlideId = "composition" | "meaning" | "reading" | "context";
 type Phase = "teach" | "quiz";
@@ -98,6 +99,8 @@ export function MojiMoriLessonSession({ ids }: { ids?: number[] }) {
   const [missText, setMissText] = useState("");
   const [shaking, setShaking] = useState(false);
   const [hotkeys, setHotkeys] = useState(false);
+  const [missTint, setMissTint] = useState(false);
+  const [browse, setBrowse] = useState<number[]>([]);
   const [playing, setPlaying] = useState<string | null>(null);
   const answers = useRef<Record<number, Saved>>({});
   const leaving = useRef(false);
@@ -118,11 +121,22 @@ export function MojiMoriLessonSession({ ids }: { ids?: number[] }) {
   const activeId = phase === "quiz" ? task?.id ?? null : card?.id ?? null;
   const detailQuery = useMojiMoriSubject(activeId);
   const detail = detailQuery.data?.id === activeId ? detailQuery.data : null;
+  const browseId = browse.length > 0 ? browse[browse.length - 1]! : null;
+  const browseQuery = useMojiMoriSubject(browseId);
   const activeCard = order?.find((item) => item.id === activeId) ?? card;
   const slides = useMemo(
     () => (activeCard && phase === "teach" ? slidesFor(activeCard, detail) : []),
     [activeCard, detail, phase],
   );
+
+  useEffect(() => {
+    setBrowse([]);
+  }, [card?.id]);
+
+  useEffect(() => {
+    if (!browseId) return;
+    document.querySelector(".mm-lesson__browse")?.scrollIntoView({ block: "start" });
+  }, [browseId]);
 
   useEffect(() => {
     if (!card || phase !== "teach") return;
@@ -234,18 +248,19 @@ export function MojiMoriLessonSession({ ids }: { ids?: number[] }) {
     setPhase("quiz");
   }
 
-  function advanceQuiz() {
+  function advanceQuiz(leave: "ok" | "miss" | null = pending) {
     if (leaving.current) return;
     leaving.current = true;
     queueMicrotask(() => {
       leaving.current = false;
     });
+    toast.dismissNow();
     const current = tasks[0];
-    const leave = pending;
     setPending(null);
     setDraft("");
     setNotice("");
     setMissText("");
+    setMissTint(false);
     setShaking(false);
     if (!current) return;
     setTasks((list) => (leave === "miss" ? [...list.slice(1), current] : list.slice(1)));
@@ -270,7 +285,10 @@ export function MojiMoriLessonSession({ ids }: { ids?: number[] }) {
     if (current.prompt === "reading") setDraft(answer);
     const result = checkStudyCard(subject, current.prompt, answer);
     if (result.shake) {
-      if (result.exception === "kanjiReading") {
+      if (result.exception === "radicalMeaning") {
+        toast(t("mojimori.study.wantKanjiMeaning"));
+        setNotice("");
+      } else if (result.exception === "kanjiReading") {
         toast(t("mojimori.study.wantVocabReading"));
         setNotice("");
       } else if (result.exception === "unusualSpelling") {
@@ -283,9 +301,15 @@ export function MojiMoriLessonSession({ ids }: { ids?: number[] }) {
       return;
     }
     if (!result.correct) {
+      if (missTint && missText === answer) {
+        advanceQuiz("miss");
+        return;
+      }
       toast(current.prompt === "reading" ? t("mojimori.study.helpReading") : t("mojimori.study.helpMeaning"));
-      setMissText(current.prompt === "meaning" ? primaryMeaning(subject) : primaryReading(subject));
-      setPending("miss");
+      setMissText(answer);
+      setDraft(answer);
+      setMissTint(true);
+      holdCaret(inputRef.current);
       return;
     }
     if (result.lenient) toast(t("mojimori.study.helpMeaning"));
@@ -439,7 +463,34 @@ export function MojiMoriLessonSession({ ids }: { ids?: number[] }) {
         {phase === "teach" && meaning ? <p className="mm-lesson__meaning">{meaning}</p> : null}
       </header>
 
-      {phase === "teach" && card ? (
+      {phase === "teach" && browseId ? (
+        <section className="mm-lesson__sheet mm-lesson__browse">
+          <button
+            type="button"
+            className="mm-quiz__back"
+            onClick={() => setBrowse((stack) => stack.slice(0, -1))}
+          >
+            <ChevronLeft size={16} />
+            {t("mojimori.study.detailBack")}
+          </button>
+          {browseQuery.data ? (
+            <ReviewInfo
+              key={browseQuery.data.id}
+              detail={browseQuery.data}
+              prompt="meaning"
+              playing={playing}
+              onPlay={play}
+              onOpen={(subject) =>
+                setBrowse((stack) =>
+                  stack[stack.length - 1] === subject.id ? stack : [...stack, subject.id],
+                )
+              }
+            />
+          ) : (
+            <MojiMoriLoading shape="lines" />
+          )}
+        </section>
+      ) : phase === "teach" && card ? (
         <section className="mm-lesson__sheet">
           <div className="mm-lesson__tabs" role="tablist">
             {slides.map((id) => (
@@ -469,7 +520,11 @@ export function MojiMoriLessonSession({ ids }: { ids?: number[] }) {
             </button>
             <div className="mm-lesson__body" role="tabpanel">
               {slide === "composition" ? (
-                <CompositionSlide card={card} detail={detail} />
+                <CompositionSlide
+                  card={card}
+                  detail={detail}
+                  onOpen={(subject) => setBrowse([subject.id])}
+                />
               ) : null}
               {slide === "meaning" ? <MeaningSlide card={card} detail={detail} /> : null}
               {slide === "reading" ? (
@@ -524,7 +579,7 @@ export function MojiMoriLessonSession({ ids }: { ids?: number[] }) {
             </p>
             {notice ? <p className="mm-quiz__exception">{notice}</p> : null}
             <div
-              className={`mm-quiz__entry${shaking ? " is-shaking" : ""}${pending === "ok" ? " is-ok" : ""}${pending === "miss" ? " is-bad" : ""}`}
+              className={`mm-quiz__entry${shaking ? " is-shaking" : ""}${pending === "ok" ? " is-ok" : ""}${pending === "miss" || missTint ? " is-bad" : ""}`}
               onAnimationEnd={() => setShaking(false)}
             >
               {pending === "miss" ? (
@@ -670,9 +725,11 @@ function QueueGlyph({ card }: { card: MojiMoriStudyCard }) {
 function CompositionSlide({
   card,
   detail,
+  onOpen,
 }: {
   card: MojiMoriStudyCard;
   detail: MojiMoriSubjectDetail | null;
+  onOpen: (subject: MojiMoriSubjectSummary) => void;
 }) {
   const { t } = useTranslation();
   if (!detail) return <MojiMoriLoading shape="lines" />;
@@ -691,7 +748,7 @@ function CompositionSlide({
       <p>{intro}</p>
       <div className="mm-lesson__parts">
         {parts.map((subject) => (
-          <PartTile key={subject.id} subject={subject} />
+          <PartTile key={subject.id} subject={subject} onOpen={onOpen} />
         ))}
       </div>
       {card.objectType === "vocabulary" ? (
@@ -706,17 +763,23 @@ function CompositionSlide({
   );
 }
 
-function PartTile({ subject }: { subject: MojiMoriSubjectSummary }) {
+function PartTile({
+  subject,
+  onOpen,
+}: {
+  subject: MojiMoriSubjectSummary;
+  onOpen: (subject: MojiMoriSubjectSummary) => void;
+}) {
   const mode = visualMode(subject.progress?.status ?? "locked", subject.progress?.srsStage ?? 0);
   return (
-    <div className="mm-lesson__part" title={subject.primaryReading}>
+    <button type="button" className="mm-lesson__part" title={subject.primaryReading} onClick={() => onOpen(subject)}>
       <span className={`study-character moji-status moji-status--${subject.objectType} moji-status--${mode}`}>
         <span className="study-character__characters">
           <SubjectCharacter subject={subject} className="text-[1.7rem] leading-none" imageClassName="h-8 w-8 object-contain" />
         </span>
       </span>
       <small>{subject.primaryMeaning}</small>
-    </div>
+    </button>
   );
 }
 
@@ -855,13 +918,13 @@ function KanjiReadingList({ readings }: { readings: MojiMoriStudyCard["readings"
     [t("mojimori.nanori"), groups.nanori],
   ] as const;
   return (
-    <div className="mm-readings">
+    <div className="mm-vocab-readings">
       {rows.map(([title, items]) => (
-        <div key={title} className={`mm-reading${items.some((item) => item.primary) ? " is-taught" : ""}`}>
-          <span>{title}</span>
-          <strong lang="ja">
+        <div key={title} className={`mm-vocab-reading${items.some((item) => item.primary) ? " is-taught" : ""}`}>
+          <p lang="ja">
             {items.length > 0 ? items.map((item) => item.reading).join(", ") : t("mojimori.study.noReading")}
-          </strong>
+          </p>
+          <span>{title}</span>
         </div>
       ))}
     </div>

@@ -66,10 +66,33 @@ function primaryReading(readings: MojiMoriReading[]): string {
   );
 }
 
-function summaryDto(
-  row: typeof mojiMoriSubjectsTable.$inferSelect,
-  progress: MojiMoriProgressView,
-) {
+const summaryColumns = {
+  id: mojiMoriSubjectsTable.id,
+  objectType: mojiMoriSubjectsTable.objectType,
+  level: mojiMoriSubjectsTable.level,
+  slug: mojiMoriSubjectsTable.slug,
+  characters: mojiMoriSubjectsTable.characters,
+  meanings: mojiMoriSubjectsTable.meanings,
+  readings: mojiMoriSubjectsTable.readings,
+  characterImages: mojiMoriSubjectsTable.characterImages,
+  lessonPosition: mojiMoriSubjectsTable.lessonPosition,
+  componentSubjectIds: mojiMoriSubjectsTable.componentSubjectIds,
+};
+
+type SummaryRow = {
+  id: number;
+  objectType: string;
+  level: number;
+  slug: string;
+  characters: string | null;
+  meanings: (typeof mojiMoriSubjectsTable.$inferSelect)["meanings"];
+  readings: (typeof mojiMoriSubjectsTable.$inferSelect)["readings"];
+  characterImages: (typeof mojiMoriSubjectsTable.$inferSelect)["characterImages"];
+  lessonPosition: number;
+  componentSubjectIds: number[];
+};
+
+function summaryDto(row: SummaryRow, progress: MojiMoriProgressView) {
   return {
     id: row.id,
     objectType: row.objectType,
@@ -84,10 +107,7 @@ function summaryDto(
   };
 }
 
-async function summarize(
-  userId: number,
-  rows: (typeof mojiMoriSubjectsTable.$inferSelect)[],
-) {
+async function summarize(userId: number, rows: SummaryRow[]) {
   const context = await unlockContextFor(userId, rows);
   return rows.map((row) =>
     summaryDto(
@@ -128,7 +148,7 @@ async function loadSummaries(userId: number, ids: number[]) {
   if (ids.length === 0) return [];
   const unique = [...new Set(ids)];
   const rows = await db
-    .select()
+    .select(summaryColumns)
     .from(mojiMoriSubjectsTable)
     .where(inArray(mojiMoriSubjectsTable.id, unique));
   const summaries = await summarize(userId, rows);
@@ -209,7 +229,7 @@ router.get("/mojimori/subjects", async (req, res, next) => {
 
     const limit = q ? MAX_SEARCH : MAX_LIST;
     const rows = await db
-      .select()
+      .select(summaryColumns)
       .from(mojiMoriSubjectsTable)
       .where(filters.length ? and(...filters) : undefined)
       .orderBy(
@@ -263,13 +283,33 @@ router.get("/mojimori/subjects/:key", async (req, res, next) => {
     }
 
     const userId = getUserId(req);
-    const [components, amalgamations, visuallySimilar, [self], answerStats] = await Promise.all([
-      loadSummaries(userId, row.componentSubjectIds),
-      loadSummaries(userId, row.amalgamationSubjectIds),
-      loadSummaries(userId, row.visuallySimilarSubjectIds),
-      summarize(userId, [row]),
+    const relatedIds = [
+      ...new Set([
+        ...row.componentSubjectIds,
+        ...row.amalgamationSubjectIds,
+        ...row.visuallySimilarSubjectIds,
+      ]),
+    ];
+    const relatedRows = relatedIds.length
+      ? await db
+          .select(summaryColumns)
+          .from(mojiMoriSubjectsTable)
+          .where(inArray(mojiMoriSubjectsTable.id, relatedIds))
+      : [];
+    const [summaries, answerStats] = await Promise.all([
+      summarize(userId, [row, ...relatedRows]),
       subjectAnswerStats(userId, row.id),
     ]);
+    const relatedById = new Map(summaries.map((item) => [item.id, item]));
+    const pick = (ids: number[]) =>
+      ids.flatMap((id) => {
+        const item = relatedById.get(id);
+        return item ? [item] : [];
+      });
+    const self = relatedById.get(row.id);
+    const components = pick(row.componentSubjectIds);
+    const amalgamations = pick(row.amalgamationSubjectIds);
+    const visuallySimilar = pick(row.visuallySimilarSubjectIds);
 
     res.json({
       ...detailDto(row, { components, amalgamations, visuallySimilar }),

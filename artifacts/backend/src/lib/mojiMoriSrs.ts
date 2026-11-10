@@ -35,7 +35,7 @@ export type PromptCheck = {
   multipleMeanings: boolean;
   multipleReadings: boolean;
   lenient: boolean;
-  exception: "kanjiReading" | "unusualSpelling" | null;
+  exception: "kanjiReading" | "unusualSpelling" | "radicalMeaning" | null;
 };
 
 export function intervalMs(stage: number, _userLevel: number): number {
@@ -216,6 +216,25 @@ export function matchMeaning(
 
 const KANA = /[\u3040-\u30ff\u31f0-\u31ff]/;
 
+function exactKanjiMeaning(answer: string, meanings: MeaningLike[]): boolean {
+  const input = normalizeMeaning(answer);
+  if (!input) return false;
+  return meanings.some(
+    (item) => item.acceptedAnswer && normalizeMeaning(item.meaning) === input,
+  );
+}
+
+/** A radical name typed for a kanji, when that kanji does not teach the same meaning. */
+export function isRadicalMeaningOnly(
+  answer: string,
+  meanings: MeaningLike[],
+  componentMeanings: MeaningLike[],
+): boolean {
+  if (componentMeanings.length === 0) return false;
+  if (exactKanjiMeaning(answer, meanings)) return false;
+  return matchMeaning(answer, componentMeanings, []).correct;
+}
+
 export function checkPrompt(
   objectType: string,
   meanings: MeaningLike[],
@@ -224,6 +243,7 @@ export function checkPrompt(
   answer: string,
   componentReadings: ReadingLike[] = [],
   auxiliaryMeanings: AuxiliaryLike[] = [],
+  componentMeanings: MeaningLike[] = [],
 ): PromptCheck {
   const prompts = promptsFor(objectType);
   const acceptedMeanings = meanings.filter((item) => item.acceptedAnswer);
@@ -240,6 +260,19 @@ export function checkPrompt(
 
   if (prompt === "meaning") {
     const text = answer.trim();
+    if (
+      objectType === "kanji" &&
+      isRadicalMeaningOnly(text, meanings, componentMeanings)
+    ) {
+      return {
+        ...flags,
+        correct: false,
+        shake: true,
+        wantedType: null,
+        lenient: false,
+        exception: "radicalMeaning",
+      };
+    }
     const verdict = matchMeaning(text, meanings, auxiliaryMeanings);
     if (!verdict.correct && KANA.test(text)) {
       return { ...flags, correct: false, shake: true, wantedType: "meaning" };
@@ -304,11 +337,19 @@ export function gradeAnswers(
   meaning: string | undefined,
   reading: string | undefined,
   auxiliaryMeanings: AuxiliaryLike[] = [],
+  componentMeanings: MeaningLike[] = [],
 ): GradeResult {
   const prompts = promptsFor(objectType);
-  const meaningCorrect = prompts.includes("meaning")
+  let meaningCorrect = prompts.includes("meaning")
     ? matchMeaning(meaning ?? "", meanings, auxiliaryMeanings).correct
     : null;
+  if (
+    meaningCorrect &&
+    objectType === "kanji" &&
+    isRadicalMeaningOnly(meaning ?? "", meanings, componentMeanings)
+  ) {
+    meaningCorrect = false;
+  }
 
   let readingCorrect: boolean | null = null;
   let shake = false;

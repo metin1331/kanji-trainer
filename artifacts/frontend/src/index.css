@@ -3,6 +3,11 @@
 
 @custom-variant dark (&:is(.dark *));
 
+html,
+body {
+  background-color: var(--app-bg);
+}
+
 html.theme-switching,
 html.theme-switching *,
 html.theme-switching *::before,
