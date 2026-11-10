@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ChevronLeft, ChevronRight, Info } from "lucide-react";
 import { useLocation } from "wouter";
 import { CollapsiblePanel, CollapsibleRoot } from "@/components/smoothui/collapsible";
@@ -59,6 +59,41 @@ function foundOrder(subjects: MojiMoriSubjectSummary[]) {
     if (byMeaning !== 0) return byMeaning;
     return left.id - right.id;
   });
+}
+
+function StageScroller({
+  open,
+  children,
+}: {
+  open: boolean;
+  children: ReactNode;
+}) {
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const [overflow, setOverflow] = useState(false);
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const measure = () => {
+      const more = el.scrollWidth - el.clientWidth - el.scrollLeft > 2;
+      setOverflow(more);
+    };
+    measure();
+    el.addEventListener("scroll", measure, { passive: true });
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    window.addEventListener("resize", measure);
+    return () => {
+      el.removeEventListener("scroll", measure);
+      observer.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [open, children]);
+  return (
+    <div className="srs-stages__scroller" ref={scrollerRef}>
+      {children}
+      {overflow ? <span className="srs-stages__fade" aria-hidden /> : null}
+    </div>
+  );
 }
 
 function SubjectCards({ subjects }: { subjects: MojiMoriSubjectSummary[] }) {
@@ -133,13 +168,10 @@ export function MojiMoriSubjectPage() {
 
   useEffect(() => {
     if (!data) return;
-    const id = sectionHash();
-    if (!id) return;
-    const frame = window.requestAnimationFrame(() => {
-      document.getElementById(id)?.scrollIntoView({ block: "start" });
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [data]);
+    window.scrollTo(0, 0);
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+  }, [data?.id]);
 
   const siblings = useMemo(() => {
     return (siblingsQuery.data ?? []).slice().sort((a, b) => {
@@ -271,22 +303,24 @@ export function MojiMoriSubjectPage() {
                 >
                   {t("mojimori.stageMenu")}
                 </button>
-                <CollapsiblePanel axis="x">
-                  <span className="srs-stages__rule" aria-hidden />
-                  {SRS_STAGES.map(({ stage, key }) => (
-                    <button
-                      key={stage}
-                      type="button"
-                      disabled={setStage.isPending}
-                      onClick={() => void setStage.mutateAsync({ id: subjectId, srsStage: stage })}
-                      className={`srs-badge${
-                        data.progress?.srsStage === stage ? " is-active" : ""
-                      }`}
-                    >
-                      {t(`mojimori.stages.${key}`)}
-                    </button>
-                  ))}
-                </CollapsiblePanel>
+                <StageScroller open={stagesOpen}>
+                  <CollapsiblePanel axis="x">
+                    <span className="srs-stages__rule" aria-hidden />
+                    {SRS_STAGES.map(({ stage, key }) => (
+                      <button
+                        key={stage}
+                        type="button"
+                        disabled={setStage.isPending}
+                        onClick={() => void setStage.mutateAsync({ id: subjectId, srsStage: stage })}
+                        className={`srs-badge${
+                          data.progress?.srsStage === stage ? " is-active" : ""
+                        }`}
+                      >
+                        {t(`mojimori.stages.${key}`)}
+                      </button>
+                    ))}
+                  </CollapsiblePanel>
+                </StageScroller>
                 <button
                   type="button"
                   className="srs-stages__hit srs-stages__hit--icon"

@@ -36,6 +36,7 @@ export function mojiMoriDashboardQuery() {
       const res = await apiFetch("/api/mojimori/dashboard");
       return parseJson<MojiMoriDashboard>(res);
     },
+    staleTime: 20_000,
   };
 }
 
@@ -77,6 +78,7 @@ export function mojiMoriSubjectsQuery(params: MojiMoriListParams) {
       );
       return data.subjects;
     },
+    staleTime: 30_000,
   };
 }
 
@@ -94,6 +96,7 @@ export function mojiMoriSubjectQuery(id: number) {
       const res = await apiFetch(`/api/mojimori/subjects/${id}`);
       return parseJson<MojiMoriSubjectDetail>(res);
     },
+    staleTime: 60_000,
   };
 }
 
@@ -115,6 +118,7 @@ export function mojiMoriSubjectByKeyQuery(objectType: string, key: string) {
       );
       return parseJson<MojiMoriSubjectDetail>(res);
     },
+    staleTime: 60_000,
   };
 }
 
@@ -152,7 +156,7 @@ export type PromptCheck = {
   multipleMeanings: boolean;
   multipleReadings: boolean;
   lenient: boolean;
-  exception: "kanjiReading" | "unusualSpelling" | null;
+  exception: "kanjiReading" | "unusualSpelling" | "radicalMeaning" | null;
   homophone?: boolean;
 };
 

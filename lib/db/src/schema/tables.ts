@@ -498,6 +498,7 @@ export const mojiMoriReviewsTable = pgTable(
   },
   (t) => [
     index("moji_mori_reviews_user_created_idx").on(t.userId, t.createdAt),
+    index("moji_mori_reviews_user_kind_created_idx").on(t.userId, t.kind, t.createdAt),
     index("moji_mori_reviews_user_subject_idx").on(t.userId, t.subjectId),
   ],
 );

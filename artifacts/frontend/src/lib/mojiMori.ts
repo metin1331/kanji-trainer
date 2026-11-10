@@ -149,6 +149,7 @@ export type MojiMoriGradeKey = {
   readings: MojiMoriReading[];
   auxiliaryMeanings: MojiMoriAuxiliaryMeaning[];
   componentReadings: MojiMoriReading[];
+  componentMeanings?: MojiMoriMeaning[];
   wordKanji: string[];
   characters: string | null;
   peers: Array<{

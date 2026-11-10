@@ -6,6 +6,7 @@ import {
   ArrowBigDownDash,
   Check,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   ChevronUp,
   Clock,
@@ -31,6 +32,7 @@ import {
 } from "../../hooks/useMojiMori";
 import { checkStudyCard, predictReviewGrade } from "../../lib/mojiMoriGrade";
 import { useTranslation } from "../../i18n/I18nProvider";
+import { applyColorScheme, getStoredColorScheme } from "../../theme/colorScheme";
 import {
   blocksReadingLatin,
   readingAnswerIncomplete,
@@ -46,7 +48,7 @@ import {
 import { MnemonicText } from "./MnemonicText";
 import { MojiMoriLayout } from "./MojiMoriLayout";
 import { SubjectTile, SubjectTileGrid } from "./SubjectTile";
-import { audioTracks, pickVoice } from "./mojiVoice";
+import { audioTracks, pickVoice, type AudioTrack } from "./mojiVoice";
 import { KanjiReview, KanjiStrokeQuiz, WordReveal } from "./KanjiStrokeQuiz";
 
 type Prompt = "meaning" | "reading" | "word";
@@ -301,6 +303,8 @@ export function MojiMoriReviewSession({
     up: boolean;
   } | null>(null);
   const [infoWanted, setInfoWanted] = useState(false);
+  const [infoStack, setInfoStack] = useState<number[]>([]);
+  const [pressedMethod, setPressedMethod] = useState<string | null>(null);
   const [kanaTab, setKanaTab] = useState("a");
   const [playing, setPlaying] = useState<string | null>(null);
   const [wordMethod, setWordMethod] = useState<"meaning" | "kanji">("kanji");
@@ -311,6 +315,8 @@ export function MojiMoriReviewSession({
   const [wordBoard, setWordBoard] = useState(false);
   const [drawTry, setDrawTry] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const quizRef = useRef<HTMLElement>(null);
+  const deferredWrap = useRef<Task[]>([]);
   const goRef = useRef<HTMLButtonElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const heard = useRef("");
@@ -348,7 +354,9 @@ export function MojiMoriReviewSession({
   const current = queue[0];
   const card = current ? byId.get(current.subjectId) : undefined;
   const infoOn = sheet === "info" && Boolean(card);
-  const detail = useMojiMoriSubject(card?.id ?? null);
+  const viewedId =
+    infoStack.length > 0 ? infoStack[infoStack.length - 1]! : (card?.id ?? null);
+  const detail = useMojiMoriSubject(viewedId);
   const tracks = audioTracks(card?.pronunciationAudios);
   const queuedIds = new Set(queue.map((task) => task.subjectId));
   const done = (cards ?? []).filter((item) => !queuedIds.has(item.id)).length;
@@ -395,7 +403,9 @@ export function MojiMoriReviewSession({
     let typing = false;
     let frame = 0;
     let releaseTimer = 0;
+    const sheetOpen = () => Boolean(document.querySelector(".mm-quiz__sheet"));
     const pin = () => {
+      if (sheetOpen()) return;
       const offset = window.visualViewport?.offsetTop ?? 0;
       if (window.scrollX !== 0 || window.scrollY !== 0 || offset !== 0) {
         window.scrollTo(0, 0);
@@ -404,12 +414,12 @@ export function MojiMoriReviewSession({
       if (still !== 0) window.scrollBy(0, -still);
       root.scrollTop = 0;
       document.body.scrollTop = 0;
-      const scroller = document.querySelector(".moji-mori.is-bare > main");
-      if (scroller instanceof HTMLElement && scroller.scrollTop !== 0) {
-        scroller.scrollTop = 0;
-      }
     };
     const loop = () => {
+      if (sheetOpen()) {
+        stop();
+        return;
+      }
       pin();
       if (typing) frame = window.requestAnimationFrame(loop);
     };
@@ -446,12 +456,18 @@ export function MojiMoriReviewSession({
     };
     document.addEventListener("pointerdown", onPointerDown, true);
     document.addEventListener("focusout", onFocusOut);
-    window.addEventListener("scroll", pin, { capture: true, passive: true });
+    const onWindowScroll = (event: Event) => {
+      if (sheetOpen()) return;
+      const target = event.target;
+      if (target instanceof Element && target.closest(".mm-quiz")) return;
+      pin();
+    };
+    window.addEventListener("scroll", onWindowScroll, { capture: true, passive: true });
     return () => {
       stop();
       document.removeEventListener("pointerdown", onPointerDown, true);
       document.removeEventListener("focusout", onFocusOut);
-      window.removeEventListener("scroll", pin, { capture: true });
+      window.removeEventListener("scroll", onWindowScroll, { capture: true });
     };
   }, []);
 
@@ -488,19 +504,9 @@ export function MojiMoriReviewSession({
     if (!stage) return;
     const root = document.documentElement;
     const body = document.body;
-    const previousRoot = root.style.backgroundColor;
-    const previousBody = body.style.backgroundColor;
-    let meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
-    const created = !meta;
-    if (!meta) {
-      meta = document.createElement("meta");
-      meta.setAttribute("name", "theme-color");
-      document.head.appendChild(meta);
-    }
-    const previousTheme = created ? null : meta.getAttribute("content");
     const apply = () => {
       const current = document.querySelector<HTMLElement>(".mm-quiz__stage");
-      if (!current || !meta) return;
+      if (!current) return;
       const raw = getComputedStyle(current).backgroundColor;
       const canvas = document.createElement("canvas").getContext("2d");
       let color = raw;
@@ -509,7 +515,11 @@ export function MojiMoriReviewSession({
         canvas.fillStyle = raw;
         if (canvas.fillStyle && canvas.fillStyle !== "#010101") color = canvas.fillStyle;
       }
-      meta.setAttribute("content", color);
+      document.querySelectorAll('meta[name="theme-color"]').forEach((node) => node.remove());
+      const next = document.createElement("meta");
+      next.name = "theme-color";
+      next.content = color;
+      document.head.appendChild(next);
       root.style.backgroundColor = color;
       body.style.backgroundColor = color;
     };
@@ -518,14 +528,14 @@ export function MojiMoriReviewSession({
     observer.observe(root, { attributes: true, attributeFilter: ["class"] });
     return () => {
       observer.disconnect();
-      root.style.backgroundColor = previousRoot;
-      body.style.backgroundColor = previousBody;
-      if (!meta) return;
-      if (created) meta.remove();
-      else if (previousTheme == null) meta.removeAttribute("content");
-      else meta.setAttribute("content", previousTheme);
+      applyColorScheme(getStoredColorScheme(), false);
     };
   }, [card?.id, card?.objectType]);
+
+  useLayoutEffect(() => {
+    if (sheet !== "info") return;
+    quizRef.current?.scrollTo({ top: 0 });
+  }, [sheet, viewedId]);
 
   function shakeFor(wanted: string | null) {
     if (wanted === "meaning") return t("mojimori.study.lookingMeaning");
@@ -545,6 +555,7 @@ export function MojiMoriReviewSession({
   }
 
   function clearCard() {
+    toast.dismissNow();
     setPending(null);
     setMode("ask");
     setDraft("");
@@ -556,6 +567,7 @@ export function MojiMoriReviewSession({
     setSheet("none");
     setInfoWanted(false);
     setInfoDenied(false);
+    setInfoStack([]);
     setWordMethod("kanji");
     setWordHint(0);
     setSpellingHint(false);
@@ -602,7 +614,7 @@ export function MojiMoriReviewSession({
     if (!current || current.prompt !== "reading") return;
     const mark = `${card.id}:${source}`;
     if (heard.current === mark) return;
-    const track = pickVoice(tracks, prefs.data.preferredVoice);
+    const track = pickVoice(tracks, prefs.data?.preferredVoice ?? "random");
     if (!track || !audioRef.current) return;
     heard.current = mark;
     audioRef.current.src = track.url;
@@ -660,9 +672,11 @@ export function MojiMoriReviewSession({
     setInfoDenied(false);
     if (sheet === "info") {
       setInfoWanted(false);
+      setInfoStack([]);
       setSheet("none");
       return;
     }
+    inputRef.current?.blur();
     if (missTint && !recordsRef.current[card.id]?.[current.prompt]) {
       commitMiss(missText);
     }
@@ -673,11 +687,20 @@ export function MojiMoriReviewSession({
   function toggleWrap() {
     setWrapUp((on) => {
       if (!on) {
-        setQueue((tasks) =>
-          tasks.filter(
-            (task, index) => index === 0 || recordsRef.current[task.subjectId],
-          ),
-        );
+        setQueue((tasks) => {
+          const keep: Task[] = [];
+          const later: Task[] = [];
+          tasks.forEach((task, index) => {
+            if (index === 0 || recordsRef.current[task.subjectId]) keep.push(task);
+            else later.push(task);
+          });
+          deferredWrap.current = later;
+          return keep;
+        });
+      } else {
+        const later = deferredWrap.current;
+        deferredWrap.current = [];
+        setQueue((tasks) => [...tasks, ...later]);
       }
       return !on;
     });
@@ -721,7 +744,10 @@ export function MojiMoriReviewSession({
       return;
     }
     if (checked.shake) {
-      if (checked.exception === "kanjiReading") {
+      if (checked.exception === "radicalMeaning") {
+        toast(t("mojimori.study.wantKanjiMeaning"));
+        setNotice("");
+      } else if (checked.exception === "kanjiReading") {
         toast(t("mojimori.study.wantVocabReading"));
         setNotice("");
       } else if (checked.exception === "unusualSpelling") {
@@ -733,6 +759,11 @@ export function MojiMoriReviewSession({
       return;
     }
     if (!checked.correct && !word?.reveal) {
+      if (missTint && submitted === missText) {
+        commitMiss(submitted);
+        advance("miss");
+        return;
+      }
       toast(
         current.prompt === "word"
           ? t("mojimori.study.helpWord")
@@ -740,11 +771,6 @@ export function MojiMoriReviewSession({
             ? t("mojimori.study.helpReading")
             : t("mojimori.study.helpMeaning"),
       );
-      if (missTint && submitted === missText) {
-        commitMiss(submitted);
-        advance("miss");
-        return;
-      }
       setMissText(submitted);
       setDraft(submitted);
       setMissTint(true);
@@ -922,7 +948,11 @@ export function MojiMoriReviewSession({
         .map((task) => task.subjectId),
     ).size;
     return (
-      <section className="mm-quiz" data-kind={card.objectType}>
+      <section
+        ref={quizRef}
+        className={`mm-quiz${wrapUp ? " is-wrapping" : ""}`}
+        data-kind={card.objectType}
+      >
         <div className="mm-quiz__meter" aria-hidden="true">
           <span
             style={{ width: total === 0 ? "0%" : `${(done / total) * 100}%` }}
@@ -1022,47 +1052,65 @@ export function MojiMoriReviewSession({
             <div className="mm-word__methods">
               <button
                 type="button"
-                className={wordMethod === "meaning" ? "is-on" : ""}
+                className={`mm-press${wordMethod === "meaning" ? " is-on" : ""}${pressedMethod === "meaning" ? " is-pressed" : ""}`}
                 disabled={wordHint > 0}
-                onClick={() => setWordMethod("meaning")}
+                onAnimationEnd={() => setPressedMethod((current) => (current === "meaning" ? null : current))}
+                onClick={() => {
+                  setPressedMethod("meaning");
+                  setWordMethod("meaning");
+                }}
               >
                 {t("mojimori.study.wordMeaningMethod")}
               </button>
               <button
                 type="button"
-                className={wordMethod === "kanji" ? "is-on" : ""}
+                className={`mm-press${wordMethod === "kanji" ? " is-on" : ""}${pressedMethod === "draw" ? " is-pressed" : ""}`}
                 disabled={wordKanji.length === 0 || spellingHint}
-                onClick={() => setWordMethod("kanji")}
+                onAnimationEnd={() => setPressedMethod((current) => (current === "draw" ? null : current))}
+                onClick={() => {
+                  setPressedMethod("draw");
+                  setWordMethod("kanji");
+                }}
               >
                 {t("mojimori.study.wordDrawMethod")}
               </button>
-              <button
-                type="button"
-                className={wordHint > 0 || spellingHint ? "is-on" : ""}
-                onClick={() => {
-                  if (wordMethod === "meaning") {
-                    setSpellingHint(true);
-                    return;
-                  }
-                  if (wordHint < 1) {
+              {wordMethod === "meaning" || wordHint < 1 ? (
+                <button
+                  type="button"
+                  className={`mm-press${pressedMethod === "hint1" ? " is-pressed" : ""}`}
+                  onAnimationEnd={() => setPressedMethod((current) => (current === "hint1" ? null : current))}
+                  onClick={() => {
+                    setPressedMethod("hint1");
+                    if (wordMethod === "meaning") {
+                      setSpellingHint(true);
+                      return;
+                    }
                     setWordHint(1);
-                    return;
-                  }
-                  if (wordBoard || !card) return;
-                  setWordBoard(true);
-                  submitAnswer({
-                    answer: card.characters || wordKanji.join(""),
-                    method: "kanji",
-                    reveal: true,
-                  });
-                }}
-              >
-                {wordMethod === "meaning"
-                  ? t("mojimori.study.wordHint")
-                  : wordHint > 0
-                    ? t("mojimori.study.wordHint2")
+                  }}
+                >
+                  {wordMethod === "meaning"
+                    ? t("mojimori.study.wordHint")
                     : t("mojimori.study.wordHint1")}
-              </button>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className={`mm-press${pressedMethod === "hint2" ? " is-pressed" : ""}`}
+                  onAnimationEnd={() => setPressedMethod((current) => (current === "hint2" ? null : current))}
+                  onClick={() => {
+                    setPressedMethod("hint2");
+                    if (wordBoard || !card) return;
+                    setWordBoard(true);
+                    submitAnswer({
+                      answer: card.characters || wordKanji.join(""),
+                      method: "kanji",
+                      reveal: true,
+                    });
+                  }}
+                >
+                  {t("mojimori.study.wordHint2")}
+                </button>
+              )}
             </div>
           ) : null}
           {showBoard ? (
@@ -1259,13 +1307,30 @@ export function MojiMoriReviewSession({
               <LastAnswers cards={byId} recent={recent} records={records} />
             ) : null}
             {infoOn && detail.data ? (
-              <ReviewInfo
-                key={`${card.id}-${current.prompt}`}
-                detail={detail.data}
-                prompt={current.prompt}
-                playing={playing}
-                onPlay={play}
-              />
+              <>
+                {infoStack.length > 0 ? (
+                  <button
+                    type="button"
+                    className="mm-quiz__back"
+                    onClick={() => setInfoStack((stack) => stack.slice(0, -1))}
+                  >
+                    <ChevronLeft size={16} />
+                    {t("mojimori.study.detailBack")}
+                  </button>
+                ) : null}
+                <ReviewInfo
+                  key={`${detail.data.id}-${infoStack.length === 0 ? current.prompt : "browse"}`}
+                  detail={detail.data}
+                  prompt={infoStack.length === 0 ? current.prompt : "meaning"}
+                  playing={playing}
+                  onPlay={play}
+                  onOpen={(subject) =>
+                    setInfoStack((stack) =>
+                      stack[stack.length - 1] === subject.id ? stack : [...stack, subject.id],
+                    )
+                  }
+                />
+              </>
             ) : null}
             {sheet === "kana" ? (
               <KanaPad
@@ -1391,16 +1456,18 @@ function AnswerLine({
   );
 }
 
-function ReviewInfo({
+export function ReviewInfo({
   detail,
   prompt,
   playing,
   onPlay,
+  onOpen,
 }: {
   detail: MojiMoriSubjectDetail;
   prompt: Prompt;
   playing: string | null;
   onPlay: (url: string) => void;
+  onOpen: (subject: MojiMoriSubjectDetail["related"]["components"][number]) => void;
 }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState({
@@ -1412,6 +1479,7 @@ function ReviewInfo({
       detail.objectType === "vocabulary",
     parts: false,
     found: false,
+    similar: false,
   });
   const primary =
     detail.meanings.find((item) => item.primary)?.meaning ??
@@ -1441,7 +1509,16 @@ function ReviewInfo({
           open={open.radicals}
           onToggle={() => toggle("radicals")}
         >
-          <SubjectTileGrid subjects={detail.related.components} compact />
+          <div className="mm-compose">
+            {detail.related.components.map((subject) => (
+              <div key={subject.id} className="mm-compose__item">
+                <SubjectTile subject={subject} compact onOpen={onOpen} />
+                <span className="mm-compose__meta">
+                  <small>{subject.primaryMeaning}</small>
+                </span>
+              </div>
+            ))}
+          </div>
         </Fold>
       ) : null}
       <Fold
@@ -1478,7 +1555,7 @@ function ReviewInfo({
           onToggle={() => toggle("reading")}
         >
           {detail.objectType === "kanji" ? (
-            <div className="mm-readings">
+            <div className="mm-vocab-readings">
               <ReadingGroup
                 title={t("mojimori.onyomi")}
                 value={readingText(readings.onyomi)}
@@ -1558,7 +1635,7 @@ function ReviewInfo({
           <div className="mm-compose">
             {detail.related.components.map((subject) => (
               <div key={subject.id} className="mm-compose__item">
-                <SubjectTile subject={subject} compact />
+                <SubjectTile subject={subject} compact onOpen={onOpen} />
                 <span className="mm-compose__meta">
                   {subject.primaryReading ? (
                     <b lang="ja">{subject.primaryReading}</b>
@@ -1577,7 +1654,25 @@ function ReviewInfo({
           open={open.found}
           onToggle={() => toggle("found")}
         >
-          <SubjectTileGrid subjects={detail.related.amalgamations} compact />
+          <SubjectTileGrid subjects={detail.related.amalgamations} compact onOpen={onOpen} />
+        </Fold>
+      ) : null}
+      {detail.objectType === "radical" && detail.related.amalgamations.length > 0 ? (
+        <Fold
+          title={t("mojimori.foundInKanji")}
+          open={open.found}
+          onToggle={() => toggle("found")}
+        >
+          <SubjectTileGrid subjects={detail.related.amalgamations} compact onOpen={onOpen} />
+        </Fold>
+      ) : null}
+      {detail.related.visuallySimilar.length > 0 ? (
+        <Fold
+          title={t("mojimori.visuallySimilar")}
+          open={open.similar}
+          onToggle={() => toggle("similar")}
+        >
+          <SubjectTileGrid subjects={detail.related.visuallySimilar} compact onOpen={onOpen} />
         </Fold>
       ) : null}
     </div>
@@ -1647,9 +1742,9 @@ function ReadingGroup({
   taught: boolean;
 }) {
   return (
-    <div className={`mm-reading${taught ? "is-taught" : ""}`}>
+    <div className={`mm-vocab-reading${taught ? " is-taught" : ""}`}>
+      <p lang="ja">{value}</p>
       <span>{title}</span>
-      <strong lang="ja">{value}</strong>
     </div>
   );
 }

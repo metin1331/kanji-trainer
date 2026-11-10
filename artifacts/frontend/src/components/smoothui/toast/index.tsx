@@ -79,26 +79,44 @@ export const toastManager: ToastManager = ToastPrimitive.createToastManager();
 export const { useToastManager } = ToastPrimitive;
 
 let visibleToasts = 0;
+const openToastIds = new Set<string>();
+let dismissInstantly = false;
 
 const add = (input: string | ToastOptions, extra?: ToastOptions) => {
   if (visibleToasts > 0) return "";
+  dismissInstantly = false;
   const options = typeof input === "string" ? { title: input, ...extra } : input;
   const previousOnRemove = options.onRemove;
   visibleToasts += 1;
-  return toastManager.add({
+  const id = toastManager.add({
     ...options,
     onRemove: () => {
+      openToastIds.delete(id);
       visibleToasts = Math.max(0, visibleToasts - 1);
+      if (openToastIds.size === 0) dismissInstantly = false;
       previousOnRemove?.();
     },
   });
+  if (id) openToastIds.add(id);
+  return id;
 };
+
+/** Remove every toast in the same frame, with no exit animation. */
+export function dismissToastsNow() {
+  const ids = [...openToastIds];
+  if (ids.length === 0 && visibleToasts === 0) return;
+  dismissInstantly = true;
+  visibleToasts = 0;
+  openToastIds.clear();
+  for (const id of ids) toastManager.close(id);
+}
 
 /**
  * Imperative helper. `toast("Saved")`, `toast({ title, description })`,
  * `toast.success()`, `toast.error()`, `toast.promise()`, `toast.close()`.
  */
 export const toast = Object.assign(add, {
+  dismissNow: dismissToastsNow,
   close: (id?: string) => toastManager.close(id),
   error: (title: string, options?: ToastOptions) =>
     add({ ...options, title, type: "error" }),
@@ -131,6 +149,7 @@ export const ToastViewport = ({ className, ...props }: ToastViewportProps) => (
 export const ToastRoot = ({ className, ...props }: ToastRootProps) => {
   const shouldReduceMotion = useReducedMotion();
   const isEnding = props.toast.transitionStatus === "ending";
+  if (dismissInstantly && isEnding) return null;
 
   return (
     <ToastPrimitive.Root
@@ -143,7 +162,9 @@ export const ToastRoot = ({ className, ...props }: ToastRootProps) => {
         <motion.div
           animate={isEnding ? TOAST_HIDDEN : TOAST_SHOWN}
           initial={shouldReduceMotion ? TOAST_SHOWN : TOAST_HIDDEN}
-          transition={shouldReduceMotion ? { duration: 0 } : SPRING_DEFAULT}
+          transition={
+            shouldReduceMotion || dismissInstantly ? { duration: 0 } : SPRING_DEFAULT
+          }
         />
       }
       {...props}

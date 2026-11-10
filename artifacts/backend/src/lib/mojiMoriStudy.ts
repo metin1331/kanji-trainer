@@ -310,12 +310,14 @@ function gradeKeyFor(
   wordKanji: string[],
   componentReadings: SubjectRow["readings"],
   peers: WordPeer[],
+  componentMeanings: SubjectRow["meanings"] = [],
 ) {
   return {
     meanings: row.meanings ?? [],
     readings: row.readings ?? [],
     auxiliaryMeanings: row.auxiliaryMeanings ?? [],
     componentReadings,
+    componentMeanings,
     wordKanji,
     characters: row.characters,
     peers,
@@ -326,7 +328,15 @@ function gradeKeyFor(
 async function componentLookup(ids: number[]) {
   const unique = [...new Set(ids)];
   if (unique.length === 0) {
-    return new Map<number, { objectType: string; characters: string | null; readings: SubjectRow["readings"] }>();
+    return new Map<
+      number,
+      {
+        objectType: string;
+        characters: string | null;
+        readings: SubjectRow["readings"];
+        meanings: SubjectRow["meanings"];
+      }
+    >();
   }
   const rows = await db
     .select({
@@ -334,6 +344,7 @@ async function componentLookup(ids: number[]) {
       objectType: mojiMoriSubjectsTable.objectType,
       characters: mojiMoriSubjectsTable.characters,
       readings: mojiMoriSubjectsTable.readings,
+      meanings: mojiMoriSubjectsTable.meanings,
     })
     .from(mojiMoriSubjectsTable)
     .where(inArray(mojiMoriSubjectsTable.id, unique));
@@ -350,6 +361,18 @@ function componentKanjiReadings(
     if (part?.objectType === "kanji") readings.push(...part.readings);
   }
   return readings;
+}
+
+function componentRadicalMeanings(
+  ids: number[],
+  lookup: Awaited<ReturnType<typeof componentLookup>>,
+): SubjectRow["meanings"] {
+  const meanings: SubjectRow["meanings"] = [];
+  for (const id of ids) {
+    const part = lookup.get(id);
+    if (part?.objectType === "radical") meanings.push(...part.meanings);
+  }
+  return meanings;
 }
 
 async function quizCards(rows: QuizSource[]) {
@@ -376,7 +399,13 @@ async function quizCards(rows: QuizSource[]) {
     const card = quizCard(row, wordKanji);
     return {
       ...card,
-      gradeKey: gradeKeyFor(row, card.wordKanji, componentKanjiReadings(ids, lookup), peers.get(row.id) ?? []),
+      gradeKey: gradeKeyFor(
+        row,
+        card.wordKanji,
+        componentKanjiReadings(ids, lookup),
+        peers.get(row.id) ?? [],
+        componentRadicalMeanings(ids, lookup),
+      ),
     };
   });
 }
@@ -392,19 +421,24 @@ export async function checkStudyAnswer(
     .where(eq(mojiMoriSubjectsTable.id, subjectId))
     .limit(1);
   if (!subject) throw new Error("Not found");
+  const components =
+    subject.componentSubjectIds.length > 0
+      ? await db
+          .select({
+            objectType: mojiMoriSubjectsTable.objectType,
+            readings: mojiMoriSubjectsTable.readings,
+            meanings: mojiMoriSubjectsTable.meanings,
+          })
+          .from(mojiMoriSubjectsTable)
+          .where(inArray(mojiMoriSubjectsTable.id, subject.componentSubjectIds))
+      : [];
   const componentReadings =
-    subject.objectType === "vocabulary" && subject.componentSubjectIds.length > 0
-      ? (
-          await db
-            .select({
-              objectType: mojiMoriSubjectsTable.objectType,
-              readings: mojiMoriSubjectsTable.readings,
-            })
-            .from(mojiMoriSubjectsTable)
-            .where(inArray(mojiMoriSubjectsTable.id, subject.componentSubjectIds))
-        )
-          .filter((row) => row.objectType === "kanji")
-          .flatMap((row) => row.readings)
+    subject.objectType === "vocabulary"
+      ? components.filter((row) => row.objectType === "kanji").flatMap((row) => row.readings)
+      : [];
+  const componentMeanings =
+    subject.objectType === "kanji"
+      ? components.filter((row) => row.objectType === "radical").flatMap((row) => row.meanings)
       : [];
   return checkPrompt(
     subject.objectType,
@@ -414,6 +448,7 @@ export async function checkStudyAnswer(
     answer,
     componentReadings,
     subject.auxiliaryMeanings,
+    componentMeanings,
   );
 }
 
@@ -644,6 +679,7 @@ export async function lessonQueue(userId: number, selectedIds?: number[]) {
         [],
         componentKanjiReadings(row.componentSubjectIds, lookup),
         [],
+        componentRadicalMeanings(row.componentSubjectIds, lookup),
       ),
     })),
   };
@@ -853,6 +889,7 @@ export async function gradeStudyItem(
   };
   if (kind === "lesson" && fromStage >= 1) return unchanged;
   if (kind === "review" && expectedStage != null && fromStage !== expectedStage) return unchanged;
+  const lookup = await componentLookup(subject.componentSubjectIds);
   const graded = gradeAnswers(
     subject.objectType,
     subject.meanings,
@@ -860,6 +897,7 @@ export async function gradeStudyItem(
     meaning,
     reading,
     subject.auxiliaryMeanings,
+    componentRadicalMeanings(subject.componentSubjectIds, lookup),
   );
 
   if (graded.shake) {
@@ -1016,7 +1054,34 @@ export async function unburnSubject(userId: number, subjectId: number) {
   return { srsStage: 1 };
 }
 
-type LogRow = { subjectId: number; kind: string; correct: boolean; createdAt: Date };
+type ActivityBucket = { at: Date; kind: string; total: number; correct: number };
+
+async function activityBuckets(userId: number): Promise<ActivityBucket[]> {
+  const rows = await db
+    .select({
+      at: sql<string>`date_trunc('hour', ${mojiMoriReviewsTable.createdAt})`,
+      kind: mojiMoriReviewsTable.kind,
+      total: sql<number>`count(*)::int`,
+      correct: sql<number>`count(*) filter (where ${mojiMoriReviewsTable.correct})::int`,
+    })
+    .from(mojiMoriReviewsTable)
+    .where(
+      and(
+        eq(mojiMoriReviewsTable.userId, userId),
+        or(eq(mojiMoriReviewsTable.kind, "lesson"), eq(mojiMoriReviewsTable.kind, "review")),
+      ),
+    )
+    .groupBy(
+      sql`date_trunc('hour', ${mojiMoriReviewsTable.createdAt})`,
+      mojiMoriReviewsTable.kind,
+    );
+  return rows.map((row) => ({
+    at: new Date(row.at),
+    kind: row.kind,
+    total: Number(row.total),
+    correct: Number(row.correct),
+  }));
+}
 
 export async function studySnapshot(userId: number) {
   const settings = await studySettings(userId);
@@ -1050,16 +1115,7 @@ export async function studySnapshot(userId: number) {
     .select({ count: sql<number>`count(*)::int` })
     .from(mojiMoriProgressTable)
     .where(and(eq(mojiMoriProgressTable.userId, userId), gte(mojiMoriProgressTable.srsStage, COMPLETED_STAGE)));
-  const logs = await db
-    .select({
-      subjectId: mojiMoriReviewsTable.subjectId,
-      kind: mojiMoriReviewsTable.kind,
-      correct: mojiMoriReviewsTable.correct,
-      createdAt: mojiMoriReviewsTable.createdAt,
-    })
-    .from(mojiMoriReviewsTable)
-    .where(eq(mojiMoriReviewsTable.userId, userId))
-    .orderBy(asc(mojiMoriReviewsTable.createdAt));
+  const activity = await activityBuckets(userId);
   const mistakes = await recentMistakes(userId);
   return {
     settings: {
@@ -1085,12 +1141,12 @@ export async function studySnapshot(userId: number) {
       recentMistakes: mistakes.length,
       cooked: Number(cooked?.count ?? 0),
     },
-    completed: periodStats(logs, now, false),
-    accuracy: periodStats(logs, now, true),
-    reviewDays: reviewDays(logs, now),
-    heatmap: heatmapFrom(logs, now),
-    lists: await itemLists(userId, logs),
-    streak: streakFrom(logs, now),
+    completed: periodStats(activity, now, false),
+    accuracy: periodStats(activity, now, true),
+    reviewDays: reviewDays(activity, now),
+    heatmap: heatmapFrom(activity, now),
+    lists: await itemLists(userId),
+    streak: streakFrom(activity, now),
   };
 }
 
@@ -1194,7 +1250,14 @@ async function recentMistakes(userId: number) {
   return [...bySubject.values()].filter((item) => item.count > 0).sort((a, b) => b.count - a.count);
 }
 
-function periodStats(logs: LogRow[], now: Date, accuracy: boolean) {
+function bucketOverlaps(at: Date, start: Date | null, end: Date | null): boolean {
+  const hourEnd = at.getTime() + 60 * 60 * 1000;
+  if (start && hourEnd <= start.getTime()) return false;
+  if (end && at.getTime() >= end.getTime()) return false;
+  return true;
+}
+
+function periodStats(logs: ActivityBucket[], now: Date, accuracy: boolean) {
   const today = startOfDay(now);
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const yearStart = new Date(now.getFullYear(), 0, 1);
@@ -1227,30 +1290,31 @@ function periodStats(logs: LogRow[], now: Date, accuracy: boolean) {
   }));
 }
 
-function measure(logs: LogRow[], start: Date | null, end: Date | null, accuracy: boolean) {
-  const rows = logs.filter((row) => {
-    if (row.kind !== "review") return false;
-    if (start && row.createdAt < start) return false;
-    if (end && row.createdAt >= end) return false;
-    return true;
-  });
-  if (!accuracy) return rows.length;
-  if (rows.length === 0) return null;
-  return Math.round((rows.filter((row) => row.correct).length / rows.length) * 1000) / 10;
+function measure(logs: ActivityBucket[], start: Date | null, end: Date | null, accuracy: boolean) {
+  let total = 0;
+  let correct = 0;
+  for (const row of logs) {
+    if (row.kind !== "review" || !bucketOverlaps(row.at, start, end)) continue;
+    total += row.total;
+    correct += row.correct;
+  }
+  if (!accuracy) return total;
+  if (total === 0) return null;
+  return Math.round((correct / total) * 1000) / 10;
 }
 
-function reviewDays(logs: LogRow[], now: Date) {
+function reviewDays(logs: ActivityBucket[], now: Date) {
   const today = startOfDay(now);
   const yearStart = new Date(now.getFullYear(), 0, 1);
   const monthAgo = addDays(today, -29);
   const start = monthAgo < yearStart ? monthAgo : yearStart;
   const totals = new Map<string, { count: number; correct: number }>();
   for (const row of logs) {
-    if (row.kind !== "review" || row.createdAt < start || row.createdAt > now) continue;
-    const key = dateKey(row.createdAt);
+    if (row.kind !== "review" || row.at < start || row.at > now) continue;
+    const key = dateKey(row.at);
     const bucket = totals.get(key) ?? { count: 0, correct: 0 };
-    bucket.count += 1;
-    if (row.correct) bucket.correct += 1;
+    bucket.count += row.total;
+    bucket.correct += row.correct;
     totals.set(key, bucket);
   }
   const days: { date: string; count: number; correct: number }[] = [];
@@ -1262,12 +1326,12 @@ function reviewDays(logs: LogRow[], now: Date) {
   return days;
 }
 
-function heatmapFrom(logs: LogRow[], now: Date) {
+function heatmapFrom(logs: ActivityBucket[], now: Date) {
   const counts = new Map<string, number>();
   for (const row of logs) {
     if (row.kind !== "lesson" && row.kind !== "review") continue;
-    const key = dateKey(row.createdAt);
-    counts.set(key, (counts.get(key) ?? 0) + 1);
+    const key = dateKey(row.at);
+    counts.set(key, (counts.get(key) ?? 0) + row.total);
   }
   const start = addDays(startOfDay(now), -364);
   return Array.from({ length: 365 }, (_, index) => {
@@ -1276,10 +1340,12 @@ function heatmapFrom(logs: LogRow[], now: Date) {
   });
 }
 
-function streakFrom(logs: LogRow[], now: Date) {
+function streakFrom(logs: ActivityBucket[], now: Date) {
   const days = new Set<string>();
   for (const row of logs) {
-    if (row.kind === "lesson" || row.kind === "review") days.add(dateKey(row.createdAt));
+    if ((row.kind === "lesson" || row.kind === "review") && row.total > 0) {
+      days.add(dateKey(row.at));
+    }
   }
   const today = startOfDay(now);
   let cursor = days.has(dateKey(today)) ? today : addDays(today, -1);
@@ -1302,7 +1368,7 @@ function streakFrom(logs: LogRow[], now: Date) {
   return { current, best, daysStudied: days.size };
 }
 
-async function itemLists(userId: number, logs: LogRow[]) {
+async function itemLists(userId: number) {
   const since = addDays(new Date(), -30);
   const cooked = await db
     .select({
@@ -1332,17 +1398,23 @@ async function itemLists(userId: number, logs: LogRow[]) {
     .where(and(eq(mojiMoriProgressTable.userId, userId), gte(mojiMoriProgressTable.unlockedAt, since)))
     .orderBy(desc(mojiMoriProgressTable.unlockedAt))
     .limit(10);
-  const tally = new Map<number, { correct: number; total: number }>();
-  for (const row of logs) {
-    if (row.kind !== "review") continue;
-    const bucket = tally.get(row.subjectId) ?? { correct: 0, total: 0 };
-    bucket.total += 1;
-    if (row.correct) bucket.correct += 1;
-    tally.set(row.subjectId, bucket);
-  }
-  const criticalIds = [...tally.entries()]
-    .filter(([, stats]) => stats.total >= 4 && stats.correct / stats.total < 0.75)
-    .sort((a, b) => a[1].correct / a[1].total - b[1].correct / b[1].total)
+  const tallyRows = await db
+    .select({
+      subjectId: mojiMoriReviewsTable.subjectId,
+      total: sql<number>`count(*)::int`,
+      correct: sql<number>`count(*) filter (where ${mojiMoriReviewsTable.correct})::int`,
+    })
+    .from(mojiMoriReviewsTable)
+    .where(and(eq(mojiMoriReviewsTable.userId, userId), eq(mojiMoriReviewsTable.kind, "review")))
+    .groupBy(mojiMoriReviewsTable.subjectId);
+  const criticalIds = tallyRows
+    .map((row) => ({
+      id: row.subjectId,
+      total: Number(row.total),
+      correct: Number(row.correct),
+    }))
+    .filter((stats) => stats.total >= 4 && stats.correct / stats.total < 0.75)
+    .sort((a, b) => a.correct / a.total - b.correct / b.total)
     .slice(0, 10);
   const subjects = criticalIds.length
     ? await db
@@ -1352,14 +1424,14 @@ async function itemLists(userId: number, logs: LogRow[]) {
           objectType: mojiMoriSubjectsTable.objectType,
         })
         .from(mojiMoriSubjectsTable)
-        .where(inArray(mojiMoriSubjectsTable.id, criticalIds.map(([id]) => id)))
+        .where(inArray(mojiMoriSubjectsTable.id, criticalIds.map((row) => row.id)))
     : [];
   const byId = new Map(subjects.map((row) => [row.id, row]));
   return {
     cooked,
     unlocked,
-    critical: criticalIds.flatMap(([id, stats]) => {
-      const subject = byId.get(id);
+    critical: criticalIds.flatMap((stats) => {
+      const subject = byId.get(stats.id);
       return subject
         ? [{ ...subject, percent: Math.round((stats.correct / stats.total) * 1000) / 10 }]
         : [];

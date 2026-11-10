@@ -99,15 +99,17 @@ export function ProgressSquare({
 export function SubjectTile({
   subject,
   compact = false,
+  onOpen,
 }: {
   subject: MojiMoriSubjectSummary;
   compact?: boolean;
+  onOpen?: (subject: MojiMoriSubjectSummary) => void;
 }) {
   const [, navigate] = useLocation();
   return (
     <button
       type="button"
-      onClick={() => navigate(mojiMoriSubjectHref(subject))}
+      onClick={() => (onOpen ? onOpen(subject) : navigate(mojiMoriSubjectHref(subject)))}
       className="flex flex-col items-center gap-1 rounded-md px-1 py-1 text-center"
     >
       <ProgressSquare subject={subject} size={compact ? "sm" : "md"} />
@@ -119,15 +121,17 @@ export function SubjectTile({
 export function LevelSubjectCard({
   subject,
   caption = true,
+  onOpen,
 }: {
   subject: MojiMoriSubjectSummary;
   caption?: boolean;
+  onOpen?: (subject: MojiMoriSubjectSummary) => void;
 }) {
   const [, navigate] = useLocation();
   return (
     <button
       type="button"
-      onClick={() => navigate(mojiMoriSubjectHref(subject))}
+      onClick={() => (onOpen ? onOpen(subject) : navigate(mojiMoriSubjectHref(subject)))}
       className="level-subject-card flex w-max max-w-full flex-col items-center px-2 py-3 text-center"
     >
       <ProgressSquare subject={subject} size="sm" />
@@ -161,15 +165,22 @@ export function SeeAllGrid({ subjects }: { subjects: MojiMoriSubjectSummary[] })
 export function SubjectTileGrid({
   subjects,
   compact = false,
+  onOpen,
 }: {
   subjects: MojiMoriSubjectSummary[];
   compact?: boolean;
+  onOpen?: (subject: MojiMoriSubjectSummary) => void;
 }) {
   if (subjects.length === 0) return null;
   return (
     <div className="flex flex-wrap gap-x-0.5 gap-y-1">
       {subjects.map((subject) => (
-        <SubjectTile key={subject.id} subject={subject} compact={compact} />
+        <SubjectTile
+          key={subject.id}
+          subject={subject}
+          compact={compact}
+          onOpen={onOpen}
+        />
       ))}
     </div>
   );

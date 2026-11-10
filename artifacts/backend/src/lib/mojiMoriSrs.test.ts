@@ -143,6 +143,25 @@ describe("one prompt at a time", () => {
     assert.equal(miss.lenient, false);
   });
 
+  it("rejects a radical meaning typed for its kanji", () => {
+    const one = [{ meaning: "One", acceptedAnswer: true }];
+    const ground = [{ meaning: "Ground", acceptedAnswer: true }];
+    const rejected = checkPrompt("kanji", one, [], "meaning", "ground", [], [], ground);
+    assert.equal(rejected.correct, false);
+    assert.equal(rejected.shake, true);
+    assert.equal(rejected.exception, "radicalMeaning");
+    const graded = gradeAnswers("kanji", one, [], "ground", undefined, [], ground);
+    assert.equal(graded.meaningCorrect, false);
+    assert.equal(graded.passed, false);
+    const shared = checkPrompt("kanji", ground, [], "meaning", "ground", [], [], ground);
+    assert.equal(shared.correct, true);
+    assert.equal(shared.exception, null);
+    const auxiliary = [{ meaning: "Ground", type: "whitelist" }];
+    const listed = checkPrompt("kanji", one, [], "meaning", "ground", [], auxiliary, ground);
+    assert.equal(listed.correct, false);
+    assert.equal(listed.exception, "radicalMeaning");
+  });
+
   it("rejects a blacklisted meaning even when it is close to an accepted one", () => {
     const meanings = [{ meaning: "Genius", acceptedAnswer: true }];
     const auxiliary = [{ meaning: "Gene", type: "blacklist" }];
