@@ -477,6 +477,59 @@ export const mojiMoriProgressTable = pgTable(
   (t) => [primaryKey({ columns: [t.userId, t.subjectId] })],
 );
 
+export type MojiMoriCheckpointTask = {
+  subjectId: number;
+  prompt: "meaning" | "reading" | "word";
+  expectedStage: number;
+};
+
+/** Idempotent receipt for one persisted review prompt. */
+export const mojiMoriPromptReceiptsTable = pgTable(
+  "moji_mori_prompt_receipts",
+  {
+    userId: integer("user_id")
+      .notNull()
+      .references(() => usersTable.id, { onDelete: "cascade" }),
+    idempotencyKey: text("idempotency_key").notNull(),
+    subjectId: integer("subject_id")
+      .notNull()
+      .references(() => mojiMoriSubjectsTable.id, { onDelete: "cascade" }),
+    prompt: text("prompt").notNull(),
+    answer: text("answer").notNull(),
+    correct: boolean("correct").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.idempotencyKey] })],
+);
+
+/** Prompts answered in the current review cycle, before SRS moves. */
+export const mojiMoriOpenPromptsTable = pgTable(
+  "moji_mori_open_prompts",
+  {
+    userId: integer("user_id")
+      .notNull()
+      .references(() => usersTable.id, { onDelete: "cascade" }),
+    subjectId: integer("subject_id")
+      .notNull()
+      .references(() => mojiMoriSubjectsTable.id, { onDelete: "cascade" }),
+    prompt: text("prompt").notNull(),
+    answer: text("answer").notNull(),
+    correct: boolean("correct").notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.subjectId, t.prompt] })],
+);
+
+/** One active unfinished review queue per user. */
+export const mojiMoriReviewCheckpointsTable = pgTable("moji_mori_review_checkpoints", {
+  userId: integer("user_id")
+    .primaryKey()
+    .references(() => usersTable.id, { onDelete: "cascade" }),
+  tasks: jsonb("tasks").$type<MojiMoriCheckpointTask[]>().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 /** One row per quiz attempt. Dashboard stats read this log. */
 export const mojiMoriReviewsTable = pgTable(
   "moji_mori_reviews",

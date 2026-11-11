@@ -16,7 +16,8 @@ import {
   progressView,
   type MojiMoriProgressView,
 } from "../lib/mojiMoriProgress";
-import { studySnapshot, lessonPicker, lessonQueue, reviewQueue, extraQueue, gradeStudyItem, gradeStudyBatch, checkStudyAnswer, checkWordAnswer, updateStudySettings, studySettings, saveSubjectNotes, unburnSubject, subjectAnswerStats, type ExtraMode, type StudyKind } from "../lib/mojiMoriStudy";
+import { studySnapshot, lessonPicker, lessonQueue, reviewQueue, extraQueue, gradeStudyItem, gradeStudyBatch, acceptReviewPrompt, readReviewResume, saveReviewCheckpoint, deleteReviewCheckpoint, dropCheckpointTask, checkStudyAnswer, checkWordAnswer, updateStudySettings, studySettings, saveSubjectNotes, unburnSubject, subjectAnswerStats, type ExtraMode, type StudyKind } from "../lib/mojiMoriStudy";
+import { isReviewPrompt } from "../lib/mojiMoriReviewProgress";
 import { COMPLETED_STAGE } from "../lib/mojiMoriUnlock";
 
 const router = Router();
@@ -416,6 +417,83 @@ router.post("/mojimori/study/check", async (req, res, next) => {
       return;
     }
     res.json(await checkStudyAnswer(subjectId, prompt, answer));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/mojimori/study/prompt", async (req, res, next) => {
+  try {
+    const subjectId = parsePositiveInt(req.body?.subjectId);
+    const prompt = typeof req.body?.prompt === "string" ? req.body.prompt : "";
+    const answer = typeof req.body?.answer === "string" ? req.body.answer.slice(0, 500) : "";
+    const idempotencyKey =
+      typeof req.body?.idempotencyKey === "string" ? req.body.idempotencyKey.trim().slice(0, 80) : "";
+    const expectedStage = Number(req.body?.expectedStage);
+    if (!subjectId || !isReviewPrompt(prompt) || !idempotencyKey || !Number.isInteger(expectedStage)) {
+      res.status(400).json({ error: "Invalid review prompt" });
+      return;
+    }
+    res.json(
+      await acceptReviewPrompt(getUserId(req), {
+        subjectId,
+        prompt,
+        answer,
+        correct: req.body?.correct === true,
+        idempotencyKey,
+        expectedStage,
+      }),
+    );
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get("/mojimori/study/resume", async (req, res, next) => {
+  try {
+    res.json(await readReviewResume(getUserId(req)));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.put("/mojimori/study/checkpoint", async (req, res, next) => {
+  try {
+    const raw = Array.isArray(req.body?.tasks) ? req.body.tasks : null;
+    if (!raw) {
+      res.status(400).json({ error: "Invalid checkpoint" });
+      return;
+    }
+    const tasks = raw.slice(0, 8000).flatMap((task: { subjectId?: unknown; prompt?: unknown; expectedStage?: unknown }) => {
+      const subjectId = parsePositiveInt(task?.subjectId);
+      const prompt = typeof task?.prompt === "string" ? task.prompt : "";
+      const expectedStage = Number(task?.expectedStage);
+      if (!subjectId || !isReviewPrompt(prompt) || !Number.isInteger(expectedStage)) return [];
+      return [{ subjectId, prompt, expectedStage }];
+    });
+    res.json(await saveReviewCheckpoint(getUserId(req), tasks));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete("/mojimori/study/checkpoint", async (req, res, next) => {
+  try {
+    res.json(await deleteReviewCheckpoint(getUserId(req)));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/mojimori/study/checkpoint/drop", async (req, res, next) => {
+  try {
+    const subjectId = parsePositiveInt(req.body?.subjectId);
+    const prompt = typeof req.body?.prompt === "string" ? req.body.prompt : "";
+    if (!subjectId || !isReviewPrompt(prompt)) {
+      res.status(400).json({ error: "Invalid checkpoint task" });
+      return;
+    }
+    res.json({ tasks: await dropCheckpointTask(getUserId(req), subjectId, prompt) });
   } catch (err) {
     next(err);
   }

@@ -10,8 +10,11 @@ import {
   Clock,
   Eye,
   House,
+  Info,
   Inbox,
   ListChecks,
+  Save,
+  SaveOff,
   ThumbsUp,
   Volume2,
   X,
@@ -50,6 +53,7 @@ import { SubjectTile, SubjectTileGrid } from "./SubjectTile";
 import { audioTracks, pickVoice, type AudioTrack } from "./mojiVoice";
 import { placeDrawingLast } from "./quizOrder";
 import { KanjiReview, KanjiStrokeQuiz, WordReveal } from "./KanjiStrokeQuiz";
+import { nextReviewQueue, rememberLapse, shuffleLapses, type LapseTask } from "./lapsesQueue";
 import {
   beginPress,
   clearFinishedPress,
@@ -57,9 +61,21 @@ import {
   restorePresses,
   whenPressFinishes,
 } from "./pressBounce";
+import {
+  buildReviewQueue,
+  deleteReviewCheckpoint,
+  dropReviewCheckpointTask,
+  enqueueReviewPrompt,
+  flushReviewOutbox,
+  onReviewPromptPersisted,
+  pendingReviewPrompts,
+  readReviewResume,
+  reviewTaskKey,
+  saveReviewCheckpoint,
+} from "../../lib/reviewProgress";
 
 type Prompt = "meaning" | "reading" | "word";
-type Task = { subjectId: number; prompt: Prompt; retry: boolean };
+type Task = { subjectId: number; prompt: Prompt; retry: boolean; resumed?: boolean };
 
 function sameTask(left: Task, right: Task) {
   return left.subjectId === right.subjectId && left.prompt === right.prompt;
@@ -345,6 +361,20 @@ export function MojiMoriReviewSession({
   const inputRef = useRef<HTMLInputElement>(null);
   const quizRef = useRef<HTMLElement>(null);
   const deferredWrap = useRef<Task[]>([]);
+  const inLapses = useRef(false);
+  const lapses = useRef<LapseTask[]>([]);
+  const lapseSeen = useRef(new Set<string>());
+  const [lapsesOn, setLapsesOn] = useState(false);
+  const [lapseTotal, setLapseTotal] = useState(0);
+  const [checkpointSaved, setCheckpointSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [resumeState, setResumeState] = useState<"idle" | "loading" | "ready" | "failed">(
+    source === "review" ? "loading" : "idle",
+  );
+  const resumeRef = useRef<{
+    tasks: Array<{ subjectId: number; prompt: Prompt; expectedStage: number }>;
+    open: Array<{ subjectId: number; prompt: string; answer: string; correct: boolean }>;
+  }>({ tasks: [], open: [] });
   const goRef = useRef<HTMLButtonElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const heard = useRef("");
@@ -355,9 +385,53 @@ export function MojiMoriReviewSession({
   const settingsReady = prefs.isFetched;
   const queryClient = useQueryClient();
   const ready = cards != null;
+  const reviewResumePending =
+    source === "review" && resumeState !== "ready" && resumeState !== "failed";
 
   useEffect(() => {
-    if (ready || !settingsReady) return;
+    if (source !== "review") return;
+    let cancel = false;
+    void (async () => {
+      try {
+        await flushReviewOutbox();
+      } catch {
+        // The outbox retries on its own. Resume still reads what the server stored.
+      }
+      try {
+        const data = await readReviewResume();
+        if (cancel) return;
+        resumeRef.current = {
+          tasks: (data.checkpoint?.tasks ?? []).flatMap((task) =>
+            task.prompt === "meaning" || task.prompt === "reading" || task.prompt === "word"
+              ? [task]
+              : [],
+          ),
+          open: data.openPrompts,
+        };
+        setCheckpointSaved((data.checkpoint?.tasks.length ?? 0) > 0);
+        setResumeState("ready");
+      } catch {
+        if (!cancel) setResumeState("failed");
+      }
+    })();
+    return () => {
+      cancel = true;
+    };
+  }, [source]);
+
+  useEffect(() => {
+    if (source !== "review") return;
+    return onReviewPromptPersisted((item) => {
+      if (item.prompt !== "meaning" && item.prompt !== "reading" && item.prompt !== "word") return;
+      void dropReviewCheckpointTask(item.subjectId, item.prompt).then(
+        (result) => setCheckpointSaved(result.tasks.length > 0),
+        () => undefined,
+      );
+    });
+  }, [source]);
+
+  useEffect(() => {
+    if (ready || !settingsReady || reviewResumePending) return;
     if (feed.data) {
       const items = feed.data.items;
       const tasks = items.flatMap((item) =>
@@ -367,15 +441,68 @@ export function MojiMoriReviewSession({
           retry: false,
         })),
       );
+      if (source !== "review") {
+        setCards(items);
+        setQueue(placeDrawingLast(shuffle(tasks), drawingLast));
+        return;
+      }
+      const byCard = new Map(items.map((item) => [item.id, item]));
+      const openKeys = new Set<string>();
+      for (const item of resumeRef.current.open) openKeys.add(reviewTaskKey(item.subjectId, item.prompt));
+      for (const item of pendingReviewPrompts()) openKeys.add(reviewTaskKey(item.subjectId, item.prompt));
+      const restored = resumeRef.current.tasks.flatMap((task) => {
+        const item = byCard.get(task.subjectId);
+        if (!item?.prompts.includes(task.prompt)) return [];
+        return [{ subjectId: task.subjectId, prompt: task.prompt, retry: false, resumed: true }];
+      });
+      const seeded: Record<number, ItemRecord> = {};
+      const remember = (
+        subjectId: number,
+        prompt: string,
+        answer: string,
+        correct: boolean,
+      ) => {
+        if (prompt !== "meaning" && prompt !== "reading" && prompt !== "word") return;
+        const item = byCard.get(subjectId);
+        if (!item?.prompts.includes(prompt)) return;
+        const record = seeded[subjectId] ?? {};
+        if (record[prompt]) return;
+        record[prompt] = { answer, correct };
+        seeded[subjectId] = record;
+      };
+      for (const item of resumeRef.current.open) {
+        remember(item.subjectId, item.prompt, item.answer, item.correct);
+      }
+      for (const item of pendingReviewPrompts()) {
+        remember(item.subjectId, item.prompt, item.answer, item.correct);
+      }
+      recordsRef.current = seeded;
+      setRecords(seeded);
       setCards(items);
-      setQueue(placeDrawingLast(shuffle(tasks), drawingLast));
+      setQueue(
+        buildReviewQueue({
+          restored,
+          due: tasks,
+          openKeys,
+          shuffle: (items) => placeDrawingLast(shuffle(items), drawingLast),
+        }),
+      );
       return;
     }
     if (!feed.isLoading && !feed.isFetching) {
       setCards([]);
       setQueue([]);
     }
-  }, [ready, settingsReady, drawingLast, feed.data, feed.isLoading, feed.isFetching]);
+  }, [
+    ready,
+    settingsReady,
+    reviewResumePending,
+    drawingLast,
+    feed.data,
+    feed.isLoading,
+    feed.isFetching,
+    source,
+  ]);
 
   const byId = useMemo(
     () => new Map((cards ?? []).map((card) => [card.id, card])),
@@ -389,8 +516,10 @@ export function MojiMoriReviewSession({
   const detail = useMojiMoriSubject(viewedId);
   const tracks = audioTracks(card?.pronunciationAudios);
   const queuedIds = new Set(queue.map((task) => task.subjectId));
-  const done = (cards ?? []).filter((item) => !queuedIds.has(item.id)).length;
-  const total = cards?.length ?? 0;
+  const reviewDone = (cards ?? []).filter((item) => !queuedIds.has(item.id)).length;
+  const reviewTotal = cards?.length ?? 0;
+  const done = lapsesOn ? Math.max(0, lapseTotal - queue.length) : reviewDone;
+  const total = lapsesOn ? lapseTotal : reviewTotal;
   const asked = Object.values(records).reduce((sum, record) => {
     return (
       sum +
@@ -607,6 +736,27 @@ export function MojiMoriReviewSession({
     setDrawTry(0);
   }
 
+  function noteLapse(task: Task) {
+    if (source !== "review") return;
+    rememberLapse(lapseSeen.current, lapses.current, task, inLapses.current);
+  }
+
+  function persistReviewPrompt(item: MojiMoriStudyCard, prompt: Prompt, attempt: Attempt) {
+    if (source !== "review" || inLapses.current) return;
+    try {
+      enqueueReviewPrompt({
+        idempotencyKey: crypto.randomUUID(),
+        subjectId: item.id,
+        prompt,
+        answer: prompt === "word" && attempt.reveal ? "\u00d7" : attempt.answer,
+        correct: attempt.correct,
+        expectedStage: item.srsStage ?? 0,
+      });
+    } catch {
+      // The answer stays in this session. A later flush retries once storage accepts it.
+    }
+  }
+
   function advance(leave: "ok" | "miss" | null = pending) {
     if (leaving.current) return;
     leaving.current = true;
@@ -614,14 +764,30 @@ export function MojiMoriReviewSession({
       leaving.current = false;
     });
     const task = current;
+    const practicing = inLapses.current;
+    const requeueMiss = leave === "miss" && Boolean(task) && !practicing;
+    const practice = practicing
+      ? []
+      : shuffleLapses(lapses.current).map((item) => ({ ...item, retry: false }));
+    const parked =
+      requeueMiss && task
+        ? placeDrawingLast(wrapUp ? queueLapse(queue, task) : parkMiss(queue, task), drawingLast)
+        : [];
+    const result = nextReviewQueue({
+      tasks: queue,
+      requeueMiss,
+      inLapses: practicing,
+      parked,
+      lapses: practice,
+    });
     clearCard();
-    if (leave === "miss" && task) {
-      setQueue((tasks) =>
-        placeDrawingLast(wrapUp ? queueLapse(tasks, task) : parkMiss(tasks, task), drawingLast),
-      );
-      return;
+    setQueue(result.tasks);
+    if (result.enterLapses) {
+      inLapses.current = true;
+      setLapsesOn(true);
+      setLapseTotal(practice.length);
+      setWrapUp(false);
     }
-    setQueue((tasks) => tasks.slice(1));
   }
 
   function play(url: string) {
@@ -656,34 +822,41 @@ export function MojiMoriReviewSession({
 
   function commitMiss(answer: string) {
     if (!current || !card) return;
-    const prev = recordsRef.current[card.id] ?? {};
-    if (prev[current.prompt]) return;
-    const next: ItemRecord = {
-      ...prev,
-      [current.prompt]: { answer, correct: false },
-    };
-    const storedWord = next.word?.reveal ? "\u00d7" : next.word?.answer;
-    if (card.prompts.every((prompt) => next[prompt]) && !next.grade) {
-      studyFlush.queue({
-        subjectId: card.id,
-        meaning: next.meaning?.answer,
-        reading: next.reading?.answer,
-        word: storedWord,
-        expectedStage: card.srsStage ?? 0,
-      });
-      if (source !== "extra") {
-        next.grade =
-          predictReviewGrade(card, {
-            meaning: next.meaning?.answer,
-            reading: next.reading?.answer,
-            word: storedWord,
-          }) ?? undefined;
+    if (!inLapses.current) {
+      const prev = recordsRef.current[card.id] ?? {};
+      if (!prev[current.prompt]) {
+        const attempt = { answer, correct: false };
+        const next: ItemRecord = {
+          ...prev,
+          [current.prompt]: attempt,
+        };
+        persistReviewPrompt(card, current.prompt, attempt);
+        const storedWord = next.word?.reveal ? "\u00d7" : next.word?.answer;
+        if (card.prompts.every((prompt) => next[prompt]) && !next.grade) {
+          if (source === "extra") {
+            studyFlush.queue({
+              subjectId: card.id,
+              meaning: next.meaning?.answer,
+              reading: next.reading?.answer,
+              word: storedWord,
+              expectedStage: card.srsStage ?? 0,
+            });
+          } else {
+            next.grade =
+              predictReviewGrade(card, {
+                meaning: next.meaning?.answer,
+                reading: next.reading?.answer,
+                word: storedWord,
+              }) ?? undefined;
+          }
+        }
+        recordsRef.current = { ...recordsRef.current, [card.id]: next };
+        setRecords(recordsRef.current);
+        setRecent((list) => [card.id, ...list.filter((id) => id !== card.id)]);
+        noteLapse(current);
+        if (next.grade) setSrsFlash({ stage: next.grade.srsStage, up: next.grade.passed });
       }
     }
-    recordsRef.current = { ...recordsRef.current, [card.id]: next };
-    setRecords(recordsRef.current);
-    setRecent((list) => [card.id, ...list.filter((id) => id !== card.id)]);
-    if (next.grade) setSrsFlash({ stage: next.grade.srsStage, up: next.grade.passed });
     setPending("miss");
     setAnswerLocked(true);
     setMissTint(true);
@@ -695,7 +868,7 @@ export function MojiMoriReviewSession({
       missTint ||
       answerLocked ||
       mode === "miss" ||
-      Boolean(recordsRef.current[card.id]?.[current.prompt]);
+      (!inLapses.current && Boolean(recordsRef.current[card.id]?.[current.prompt]));
     if (!answered) {
       setInfoDenied(true);
       window.setTimeout(() => setInfoDenied(false), 1600);
@@ -709,7 +882,10 @@ export function MojiMoriReviewSession({
       return;
     }
     inputRef.current?.blur();
-    if (missTint && !recordsRef.current[card.id]?.[current.prompt]) {
+    if (
+      missTint &&
+      (inLapses.current || !recordsRef.current[card.id]?.[current.prompt])
+    ) {
       commitMiss(missText);
     }
     setAnswerLocked(true);
@@ -717,6 +893,7 @@ export function MojiMoriReviewSession({
   }
 
   function toggleWrap() {
+    if (inLapses.current) return;
     setWrapUp((on) => {
       if (!on) {
         setQueue((tasks) => {
@@ -833,7 +1010,7 @@ export function MojiMoriReviewSession({
       return;
     }
     const prev = recordsRef.current[card.id] ?? {};
-    const first = !prev[current.prompt];
+    const first = !inLapses.current && !prev[current.prompt];
     const next: ItemRecord = { ...prev };
     if (first) {
       next[current.prompt] = {
@@ -841,17 +1018,20 @@ export function MojiMoriReviewSession({
         correct: checked.correct,
         reveal: word?.reveal,
       };
+      persistReviewPrompt(card, current.prompt, next[current.prompt]!);
+      if (!checked.correct) noteLapse(current);
     }
     const storedWord = next.word?.reveal ? "\u00d7" : next.word?.answer;
     if (first && card.prompts.every((prompt) => next[prompt]) && !next.grade) {
-      studyFlush.queue({
-        subjectId: card.id,
-        meaning: next.meaning?.answer,
-        reading: next.reading?.answer,
-        word: storedWord,
-        expectedStage: card.srsStage ?? 0,
-      });
-      if (source !== "extra") {
+      if (source === "extra") {
+        studyFlush.queue({
+          subjectId: card.id,
+          meaning: next.meaning?.answer,
+          reading: next.reading?.answer,
+          word: storedWord,
+          expectedStage: card.srsStage ?? 0,
+        });
+      } else {
         next.grade =
           predictReviewGrade(card, {
             meaning: next.meaning?.answer,
@@ -895,21 +1075,69 @@ export function MojiMoriReviewSession({
   }
 
   useEffect(() => {
-    if (!ready || queue.length > 0 || (cards?.length ?? 0) === 0) return;
+    if (!ready || reviewResumePending || queue.length > 0 || (cards?.length ?? 0) === 0) return;
+    if (source === "review") {
+      void flushReviewOutbox()
+        .then(() => deleteReviewCheckpoint())
+        .then(() => {
+          setCheckpointSaved(false);
+          return queryClient.invalidateQueries({ queryKey: ["mojimori"] });
+        })
+        .catch(() => toast(t("mojimori.study.saveFailed")));
+      return;
+    }
     void studyFlush.flush().catch(() => toast(t("mojimori.study.saveFailed")));
-  }, [ready, queue.length, cards, studyFlush, t]);
+  }, [ready, reviewResumePending, queue.length, cards, studyFlush, source, t, queryClient]);
 
   function goHome(event: { preventDefault: () => void }) {
     event.preventDefault();
-    void studyFlush.flush().then(
-      () => setLocation("/mojimori"),
+    const flush = source === "review" ? flushReviewOutbox() : studyFlush.flush();
+    void flush.then(
+      () => {
+        if (source === "review") void queryClient.invalidateQueries({ queryKey: ["mojimori"] });
+        setLocation("/mojimori");
+      },
       () => toast(t("mojimori.study.saveFailed")),
     );
   }
 
   function finishHome() {
-    void studyFlush.flush().catch(() => toast(t("mojimori.study.saveFailed")));
-    setLocation("/mojimori");
+    if (source !== "review") {
+      void studyFlush.flush().catch(() => toast(t("mojimori.study.saveFailed")));
+      setLocation("/mojimori");
+      return;
+    }
+    void flushReviewOutbox().then(
+      () => setLocation("/mojimori"),
+      () => toast(t("mojimori.study.saveFailed")),
+    );
+  }
+
+  async function toggleCheckpoint() {
+    if (source !== "review" || saving) return;
+    setSaving(true);
+    try {
+      if (checkpointSaved) {
+        await deleteReviewCheckpoint();
+        setCheckpointSaved(false);
+        toast(t("mojimori.study.progressCancelled"));
+        return;
+      }
+      if (inLapses.current || queue.length === 0) return;
+      await flushReviewOutbox();
+      const tasks = queue.map((task) => ({
+        subjectId: task.subjectId,
+        prompt: task.prompt,
+        expectedStage: byId.get(task.subjectId)?.srsStage ?? 0,
+      }));
+      const saved = await saveReviewCheckpoint(tasks);
+      setCheckpointSaved(saved.tasks.length > 0);
+      if (saved.tasks.length > 0) toast(t("mojimori.study.progressSaved"));
+    } catch {
+      toast(t("mojimori.study.saveFailed"));
+    } finally {
+      setSaving(false);
+    }
   }
 
   useEffect(() => {
@@ -946,7 +1174,7 @@ export function MojiMoriReviewSession({
     return () => window.removeEventListener("keydown", onKey);
   });
 
-  if (cards == null && settingsReady && feed.data) {
+  if (source !== "review" && cards == null && settingsReady && feed.data) {
     const items = feed.data.items;
     const tasks = items.flatMap((item) =>
       item.prompts.map((prompt) => ({
@@ -960,7 +1188,7 @@ export function MojiMoriReviewSession({
   }
 
   const page = (() => {
-    if (feed.isLoading || !ready) return <MojiMoriLoading />;
+    if (feed.isLoading || !ready || reviewResumePending) return <MojiMoriLoading />;
     if (!card || !current) {
       return (
         <section className="glass-panel mm-quiz__done">
@@ -1010,7 +1238,7 @@ export function MojiMoriReviewSession({
       missTint ||
       answerLocked ||
       mode === "miss" ||
-      Boolean(records[card.id]?.[current.prompt]);
+      (!lapsesOn && Boolean(records[card.id]?.[current.prompt]));
     const wrapCount = new Set(
       queue
         .filter((task) => records[task.subjectId])
@@ -1029,15 +1257,38 @@ export function MojiMoriReviewSession({
         </div>
         <header className="mm-quiz__stage" data-kind={card.objectType}>
           <div className="mm-quiz__stage-bar">
-            <button
-              type="button"
-              className="mm-quiz__home"
-              title={t("mojimori.study.returnHome")}
-              aria-label={t("mojimori.study.returnHome")}
-              onClick={goHome}
-            >
-              <House size={18} />
-            </button>
+            <div className="mm-quiz__stage-tools">
+              <button
+                type="button"
+                className="mm-quiz__home"
+                title={t("mojimori.study.returnHome")}
+                aria-label={t("mojimori.study.returnHome")}
+                onClick={goHome}
+              >
+                <House size={18} />
+              </button>
+              {source === "review" ? (
+                <button
+                  type="button"
+                  className="mm-quiz__home"
+                  title={
+                    checkpointSaved
+                      ? t("mojimori.study.cancelSavedProgress")
+                      : t("mojimori.study.saveProgress")
+                  }
+                  aria-label={
+                    checkpointSaved
+                      ? t("mojimori.study.cancelSavedProgress")
+                      : t("mojimori.study.saveProgress")
+                  }
+                  aria-pressed={checkpointSaved}
+                  disabled={saving || (lapsesOn && !checkpointSaved)}
+                  onClick={() => void toggleCheckpoint()}
+                >
+                  {checkpointSaved ? <SaveOff size={18} /> : <Save size={18} />}
+                </button>
+              ) : null}
+            </div>
             <div className="mm-quiz__stats">
               <span title={t("mojimori.study.percentTitle")}>
                 <ThumbsUp size={15} />
@@ -1103,7 +1354,33 @@ export function MojiMoriReviewSession({
           </div>
         </header>
 
-        <div className="mm-quiz__ask-container">
+        <div
+          className={`mm-quiz__ask-container${lapsesOn ? " is-lapses" : ""}${current.resumed && !lapsesOn ? " is-resumed" : ""}`}
+        >
+          {current.resumed && !lapsesOn ? (
+            <p className="mm-quiz__resumed">{t("mojimori.study.resumed")}</p>
+          ) : null}
+          {lapsesOn ? (
+            <p className="mm-quiz__lapses">
+              <span>{t("mojimori.study.lapses")}</span>
+              <button
+                type="button"
+                aria-label={t("mojimori.study.lapsesInfo")}
+                onPointerEnter={(event) => {
+                  if (event.pointerType !== "mouse") return;
+                  toast(t("mojimori.study.lapsesInfo"));
+                }}
+                onClick={(event) => {
+                  event.preventDefault();
+                  const finePointer = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+                  if (finePointer && event.detail !== 0) return;
+                  toast(t("mojimori.study.lapsesInfo"));
+                }}
+              >
+                <Info size={14} />
+              </button>
+            </p>
+          ) : null}
           <p className="mm-quiz__ask" data-kind={card.objectType}>
             <span>{kindLabel(card.objectType)}</span>
             <span>{promptWord}</span>
@@ -1310,6 +1587,7 @@ export function MojiMoriReviewSession({
           <button
             type="button"
             className={`mm-quiz__tool${wrapUp ? " is-on mm-quiz__tool--count" : ""}`}
+            disabled={lapsesOn}
             onClick={toggleWrap}
           >
             <span>{t("mojimori.study.wrapUp")}</span>

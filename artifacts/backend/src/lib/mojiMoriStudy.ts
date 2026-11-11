@@ -1,9 +1,13 @@
 import {
   db,
+  mojiMoriOpenPromptsTable,
   mojiMoriProgressTable,
+  mojiMoriPromptReceiptsTable,
+  mojiMoriReviewCheckpointsTable,
   mojiMoriReviewsTable,
   mojiMoriSubjectsTable,
   mojiMoriUsersTable,
+  type MojiMoriCheckpointTask,
 } from "@workspace/db";
 import { and, asc, desc, eq, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import {
@@ -22,6 +26,15 @@ import {
   type WordPeer,
 } from "./mojiMoriSrs";
 import { COMPLETED_STAGE, UNLOCK_THRESHOLD } from "./mojiMoriUnlock";
+import {
+  acceptOutcome,
+  completionDecision,
+  isReviewPrompt,
+  reconcileCheckpointTasks,
+  requiredReviewPrompts,
+  taskKey,
+  type ReviewPrompt,
+} from "./mojiMoriReviewProgress";
 import {
   ensureMojiMoriUser,
   maybeLevelUp,
@@ -790,6 +803,8 @@ export async function extraQueue(userId: number, mode: ExtraMode) {
   return { items: await quizCards(rows) };
 }
 
+type StudyDb = Pick<typeof db, "insert" | "update" | "delete" | "select">;
+
 async function writeAttempts(
   userId: number,
   subjectId: number,
@@ -798,10 +813,11 @@ async function writeAttempts(
   graded: GradeResult,
   fromStage: number,
   toStage: number,
+  executor: StudyDb = db,
 ) {
   for (const prompt of promptsFor(objectType)) {
     const correct = prompt === "meaning" ? graded.meaningCorrect === true : graded.readingCorrect === true;
-    await db.insert(mojiMoriReviewsTable).values({
+    await executor.insert(mojiMoriReviewsTable).values({
       userId,
       subjectId,
       kind,
@@ -810,10 +826,10 @@ async function writeAttempts(
       fromStage,
       toStage,
     });
-    await bumpAnswerStat(userId, subjectId, prompt, correct);
+    await bumpAnswerStat(userId, subjectId, prompt, correct, executor);
   }
   if (graded.wordCorrect !== null) {
-    await db.insert(mojiMoriReviewsTable).values({
+    await executor.insert(mojiMoriReviewsTable).values({
       userId,
       subjectId,
       kind,
@@ -830,6 +846,7 @@ async function bumpAnswerStat(
   subjectId: number,
   prompt: "meaning" | "reading",
   correct: boolean,
+  executor: StudyDb = db,
 ) {
   const meaning = prompt === "meaning";
   const correctCol = meaning
@@ -844,7 +861,7 @@ async function bumpAnswerStat(
   const maxCol = meaning
     ? mojiMoriProgressTable.meaningMaxStreak
     : mojiMoriProgressTable.readingMaxStreak;
-  await db
+  await executor
     .update(mojiMoriProgressTable)
     .set(
       correct
@@ -894,6 +911,19 @@ export async function gradeStudyItem(
   };
   if (kind === "lesson" && fromStage >= 1) return unchanged;
   if (kind === "review" && expectedStage != null && fromStage !== expectedStage) return unchanged;
+  if (kind === "review") {
+    const [openPrompt] = await db
+      .select({ prompt: mojiMoriOpenPromptsTable.prompt })
+      .from(mojiMoriOpenPromptsTable)
+      .where(
+        and(
+          eq(mojiMoriOpenPromptsTable.userId, userId),
+          eq(mojiMoriOpenPromptsTable.subjectId, subjectId),
+        ),
+      )
+      .limit(1);
+    if (openPrompt) return unchanged;
+  }
   const lookup = await componentLookup(subject.componentSubjectIds);
   const graded = gradeAnswers(
     subject.objectType,
@@ -990,6 +1020,271 @@ export async function gradeStudyBatch(
   return { results, error };
 }
 
+export async function acceptReviewPrompt(
+  userId: number,
+  input: {
+    subjectId: number;
+    prompt: ReviewPrompt;
+    answer: string;
+    correct: boolean;
+    idempotencyKey: string;
+    expectedStage: number;
+  },
+) {
+  const [subject] = await db
+    .select()
+    .from(mojiMoriSubjectsTable)
+    .where(eq(mojiMoriSubjectsTable.id, input.subjectId))
+    .limit(1);
+  if (!subject) throw new Error("Not found");
+  const lookup = await componentLookup(subject.componentSubjectIds);
+  const wordKanji = compositionKanji(subject.componentSubjectIds, (id) => lookup.get(id));
+  const required = requiredReviewPrompts(subject.objectType, wordKanji.length > 0);
+  if (!required.includes(input.prompt)) throw new Error("Prompt does not apply");
+  const componentMeanings = componentRadicalMeanings(subject.componentSubjectIds, lookup);
+  const levelBefore = await ensureMojiMoriUser(userId);
+  const outcome = await db.transaction(async (tx) => {
+    const [row] = await tx
+      .select({
+        srsStage: mojiMoriProgressTable.srsStage,
+        incorrectCount: mojiMoriProgressTable.incorrectCount,
+        unlockedAt: mojiMoriProgressTable.unlockedAt,
+      })
+      .from(mojiMoriProgressTable)
+      .where(
+        and(
+          eq(mojiMoriProgressTable.userId, userId),
+          eq(mojiMoriProgressTable.subjectId, input.subjectId),
+        ),
+      )
+      .for("update");
+    if (!row || row.srsStage < 1 || row.srsStage >= COMPLETED_STAGE) {
+      throw new Error("Item is not in reviews");
+    }
+    const inserted = await tx
+      .insert(mojiMoriPromptReceiptsTable)
+      .values({
+        userId,
+        idempotencyKey: input.idempotencyKey,
+        subjectId: input.subjectId,
+        prompt: input.prompt,
+        answer: input.answer,
+        correct: input.correct,
+      })
+      .onConflictDoNothing()
+      .returning({ key: mojiMoriPromptReceiptsTable.idempotencyKey });
+    if (
+      acceptOutcome({ receiptInserted: inserted.length > 0, decision: "wait" }) === "duplicate"
+    ) {
+      return { duplicate: true, graded: false, stale: false, srsStage: row.srsStage, leveledUp: false };
+    }
+    if (row.srsStage !== input.expectedStage) {
+      return { duplicate: false, graded: false, stale: true, srsStage: row.srsStage, leveledUp: false };
+    }
+    await tx
+      .insert(mojiMoriOpenPromptsTable)
+      .values({
+        userId,
+        subjectId: input.subjectId,
+        prompt: input.prompt,
+        answer: input.answer,
+        correct: input.correct,
+        idempotencyKey: input.idempotencyKey,
+      })
+      .onConflictDoNothing();
+    const open = await tx
+      .select()
+      .from(mojiMoriOpenPromptsTable)
+      .where(
+        and(
+          eq(mojiMoriOpenPromptsTable.userId, userId),
+          eq(mojiMoriOpenPromptsTable.subjectId, input.subjectId),
+        ),
+      );
+    const decision = completionDecision({
+      storedPrompts: open.map((item) => item.prompt),
+      required,
+      stage: row.srsStage,
+      expectedStage: input.expectedStage,
+    });
+    if (decision !== "grade") {
+      return { duplicate: false, graded: false, stale: false, srsStage: row.srsStage, leveledUp: false };
+    }
+    const stored = (prompt: ReviewPrompt) => open.find((item) => item.prompt === prompt)?.answer;
+    const graded = gradeAnswers(
+      subject.objectType,
+      subject.meanings,
+      subject.readings,
+      stored("meaning"),
+      stored("reading"),
+      subject.auxiliaryMeanings,
+      componentMeanings,
+    );
+    let wordCorrect: boolean | null = null;
+    if (required.includes("word")) {
+      wordCorrect = wordAnswerCorrect(
+        stored("word"),
+        subject.meanings,
+        subject.auxiliaryMeanings,
+        wordKanji.join(""),
+      );
+    }
+    const scored = applyWordGrade(graded, wordCorrect);
+    const next = scored.passed
+      ? { stage: nextStageOnCorrect(row.srsStage), incorrectCount: 0 }
+      : nextStageOnWrong(row.srsStage, row.incorrectCount);
+    const executor = tx as unknown as StudyDb;
+    await applyStage(
+      userId,
+      input.subjectId,
+      next.stage,
+      next.incorrectCount,
+      levelBefore,
+      row.unlockedAt ?? new Date(),
+      executor,
+      false,
+    );
+    await writeAttempts(
+      userId,
+      input.subjectId,
+      "review",
+      subject.objectType,
+      scored,
+      row.srsStage,
+      next.stage,
+      executor,
+    );
+    await tx
+      .delete(mojiMoriOpenPromptsTable)
+      .where(
+        and(
+          eq(mojiMoriOpenPromptsTable.userId, userId),
+          eq(mojiMoriOpenPromptsTable.subjectId, input.subjectId),
+        ),
+      );
+    return { duplicate: false, graded: true, stale: false, srsStage: next.stage, leveledUp: false };
+  });
+  if (!outcome.graded) return outcome;
+  await refreshDependents(userId, input.subjectId);
+  const moved = await maybeLevelUp(userId);
+  return { ...outcome, leveledUp: moved.leveledUp };
+}
+
+function cleanCheckpointTasks(tasks: MojiMoriCheckpointTask[]) {
+  const seen = new Set<string>();
+  const clean: MojiMoriCheckpointTask[] = [];
+  for (const task of tasks) {
+    if (!Number.isInteger(task.subjectId) || task.subjectId <= 0) continue;
+    if (!isReviewPrompt(task.prompt)) continue;
+    if (!Number.isInteger(task.expectedStage) || task.expectedStage < 1) continue;
+    const key = taskKey(task.subjectId, task.prompt);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    clean.push({
+      subjectId: task.subjectId,
+      prompt: task.prompt,
+      expectedStage: task.expectedStage,
+    });
+  }
+  return clean.slice(0, 8000);
+}
+
+async function openPromptRows(userId: number) {
+  return db
+    .select({
+      subjectId: mojiMoriOpenPromptsTable.subjectId,
+      prompt: mojiMoriOpenPromptsTable.prompt,
+      answer: mojiMoriOpenPromptsTable.answer,
+      correct: mojiMoriOpenPromptsTable.correct,
+    })
+    .from(mojiMoriOpenPromptsTable)
+    .where(eq(mojiMoriOpenPromptsTable.userId, userId));
+}
+
+export async function readReviewResume(userId: number) {
+  const openPrompts = await openPromptRows(userId);
+  const [checkpoint] = await db
+    .select()
+    .from(mojiMoriReviewCheckpointsTable)
+    .where(eq(mojiMoriReviewCheckpointsTable.userId, userId))
+    .limit(1);
+  if (!checkpoint) return { checkpoint: null, openPrompts };
+  const tasks = cleanCheckpointTasks(checkpoint.tasks ?? []);
+  const subjectIds = [...new Set(tasks.map((task) => task.subjectId))];
+  const progress = await progressBySubjectId(userId, subjectIds);
+  const now = new Date();
+  const openKeys = new Set(openPrompts.map((item) => taskKey(item.subjectId, item.prompt)));
+  const openSubjects = new Set(openPrompts.map((item) => item.subjectId));
+  const kept = reconcileCheckpointTasks(tasks, {
+    openKeys,
+    stageOf: (subjectId) => progress.get(subjectId)?.srsStage ?? null,
+    due: (subjectId) => {
+      const row = progress.get(subjectId);
+      if (!row || row.srsStage < 1 || row.srsStage >= COMPLETED_STAGE) return false;
+      return row.availableAt == null || row.availableAt <= now;
+    },
+    hasOpenSubject: (subjectId) => openSubjects.has(subjectId),
+  });
+  if (kept.length !== tasks.length) {
+    if (kept.length === 0) await deleteReviewCheckpoint(userId);
+    else {
+      await db
+        .update(mojiMoriReviewCheckpointsTable)
+        .set({ tasks: kept, updatedAt: new Date() })
+        .where(eq(mojiMoriReviewCheckpointsTable.userId, userId));
+    }
+  }
+  return { checkpoint: kept.length > 0 ? { tasks: kept } : null, openPrompts };
+}
+
+export async function saveReviewCheckpoint(userId: number, tasks: MojiMoriCheckpointTask[]) {
+  const clean = cleanCheckpointTasks(tasks);
+  if (clean.length === 0) {
+    await deleteReviewCheckpoint(userId);
+    return { tasks: [] as MojiMoriCheckpointTask[] };
+  }
+  await db
+    .insert(mojiMoriReviewCheckpointsTable)
+    .values({ userId, tasks: clean, updatedAt: new Date() })
+    .onConflictDoUpdate({
+      target: mojiMoriReviewCheckpointsTable.userId,
+      set: { tasks: clean, updatedAt: new Date() },
+    });
+  return { tasks: clean };
+}
+
+export async function deleteReviewCheckpoint(userId: number) {
+  await db
+    .delete(mojiMoriReviewCheckpointsTable)
+    .where(eq(mojiMoriReviewCheckpointsTable.userId, userId));
+  return { tasks: [] as MojiMoriCheckpointTask[] };
+}
+
+export async function dropCheckpointTask(userId: number, subjectId: number, prompt: ReviewPrompt) {
+  return db.transaction(async (tx) => {
+    const [row] = await tx
+      .select()
+      .from(mojiMoriReviewCheckpointsTable)
+      .where(eq(mojiMoriReviewCheckpointsTable.userId, userId))
+      .for("update");
+    if (!row) return [] as MojiMoriCheckpointTask[];
+    const tasks = cleanCheckpointTasks(row.tasks ?? []).filter(
+      (task) => !(task.subjectId === subjectId && task.prompt === prompt),
+    );
+    if (tasks.length === 0) {
+      await tx
+        .delete(mojiMoriReviewCheckpointsTable)
+        .where(eq(mojiMoriReviewCheckpointsTable.userId, userId));
+      return [] as MojiMoriCheckpointTask[];
+    }
+    await tx
+      .update(mojiMoriReviewCheckpointsTable)
+      .set({ tasks, updatedAt: new Date() })
+      .where(eq(mojiMoriReviewCheckpointsTable.userId, userId));
+    return tasks;
+  });
+}
+
 async function applyStage(
   userId: number,
   subjectId: number,
@@ -997,12 +1292,14 @@ async function applyStage(
   incorrectCount: number,
   userLevel: number,
   unlockedAt: Date,
+  executor: StudyDb = db,
+  refresh = true,
 ) {
   const now = new Date();
   const passed = srsStage >= UNLOCK_THRESHOLD;
   const burned = srsStage >= COMPLETED_STAGE;
   const availableAt = availableAfter(now, srsStage, userLevel);
-  await db
+  await executor
     .insert(mojiMoriProgressTable)
     .values({
       userId,
@@ -1027,7 +1324,7 @@ async function applyStage(
         incorrectCount,
       },
     });
-  await refreshDependents(userId, subjectId);
+  if (refresh) await refreshDependents(userId, subjectId);
 }
 
 export async function saveSubjectNotes(

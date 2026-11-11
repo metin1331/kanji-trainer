@@ -2501,6 +2501,12 @@ button.forecast-row {
   justify-content: space-between;
 }
 
+.mm-quiz__stage-tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
 .mm-quiz__stats {
   gap: 0.85rem;
   font-size: 0.95rem;
@@ -2590,6 +2596,39 @@ button.forecast-row {
 .dark .moji-mori .mm-quiz__ask-container {
   background: var(--color-ink);
   color: #141927;
+}
+
+.mm-quiz__ask-container.is-lapses,
+.mm-quiz__ask-container.is-resumed {
+  flex-direction: column;
+  gap: 0.2rem;
+  padding-top: 0.35rem;
+}
+
+.mm-quiz__lapses,
+.mm-quiz__resumed {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  margin: 0;
+  color: inherit;
+  font-size: 0.72rem;
+  font-weight: 750;
+  letter-spacing: 0.06em;
+  line-height: 1;
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+
+.mm-quiz__lapses button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 0.1rem;
+  cursor: pointer;
 }
 
 .mm-quiz__ask {
