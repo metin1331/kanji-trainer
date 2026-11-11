@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { buildReviewQueue, dedupeOutbox, type ReviewOutboxItem } from "./reviewProgress.ts";
+import {
+  buildPartialResumedTasks,
+  buildReviewQueue,
+  dedupeOutbox,
+  type ReviewOutboxItem,
+} from "./reviewProgress.ts";
 
 describe("buildReviewQueue", () => {
   const restored = [
@@ -26,6 +31,29 @@ describe("buildReviewQueue", () => {
     );
     assert.equal(queue[0]?.resumed, true);
     assert.equal("resumed" in (queue[2] ?? {}), false);
+  });
+
+  it("puts incomplete prompts ahead after autosave", () => {
+    const queue = buildReviewQueue({
+      restored: buildPartialResumedTasks(
+        [{ id: 1, prompts: ["meaning", "reading", "word"] }],
+        [{ subjectId: 1, prompt: "meaning", answer: "tree", correct: true }],
+      ),
+      due: [
+        { subjectId: 1, prompt: "meaning" },
+        { subjectId: 1, prompt: "reading" },
+        { subjectId: 1, prompt: "word" },
+        { subjectId: 2, prompt: "meaning" },
+      ],
+      openKeys: new Set(["1:meaning"]),
+      shuffle: (items) => items,
+    });
+    assert.deepEqual(
+      queue.map((task) => `${task.subjectId}:${task.prompt}`),
+      ["1:reading", "1:word", "2:meaning"],
+    );
+    assert.equal(queue[0]?.resumed, true);
+    assert.equal(queue[1]?.resumed, true);
   });
 
   it("does not restore a prompt that is already stored", () => {

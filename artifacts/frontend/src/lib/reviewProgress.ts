@@ -41,6 +41,84 @@ export function dedupeOutbox(items: readonly ReviewOutboxItem[]) {
   return next;
 }
 
+export function openRowsFromAnsweredRecords(
+  items: Array<{ id: number; prompts: readonly string[] }>,
+  records: Record<number, Partial<Record<ReviewPrompt, { answer: string; correct: boolean }>>>,
+) {
+  const rows: OpenPrompt[] = [];
+  const byId = new Map(items.map((item) => [item.id, item]));
+  for (const [idText, record] of Object.entries(records)) {
+    const subjectId = Number(idText);
+    const item = byId.get(subjectId);
+    if (!item || !record) continue;
+    for (const prompt of item.prompts) {
+      if (prompt !== "meaning" && prompt !== "reading" && prompt !== "word") continue;
+      const attempt = record[prompt];
+      if (!attempt) continue;
+      rows.push({
+        subjectId,
+        prompt,
+        answer: attempt.answer,
+        correct: attempt.correct,
+      });
+    }
+  }
+  return rows;
+}
+
+export function mergeCheckpointTasks(
+  partial: readonly CheckpointTask[],
+  queue: readonly CheckpointTask[],
+) {
+  const keys = new Set<string>();
+  const merged: CheckpointTask[] = [];
+  for (const task of [...partial, ...queue]) {
+    const key = reviewTaskKey(task.subjectId, task.prompt);
+    if (keys.has(key)) continue;
+    keys.add(key);
+    merged.push(task);
+  }
+  return merged;
+}
+
+export function partialCheckpointTasks(
+  items: Array<{ id: number; prompts: readonly string[]; srsStage?: number }>,
+  openPrompts: Array<{ subjectId: number; prompt: string }>,
+) {
+  return buildPartialResumedTasks(items, openPrompts).map((task) => ({
+    subjectId: task.subjectId,
+    prompt: task.prompt,
+    expectedStage: items.find((item) => item.id === task.subjectId)?.srsStage ?? 0,
+  }));
+}
+
+export function buildPartialResumedTasks(
+  items: Array<{ id: number; prompts: readonly string[] }>,
+  openPrompts: Array<{ subjectId: number; prompt: string }>,
+) {
+  const openBySubject = new Map<number, Set<string>>();
+  const subjectOrder: number[] = [];
+  for (const row of openPrompts) {
+    if (!openBySubject.has(row.subjectId)) subjectOrder.push(row.subjectId);
+    const set = openBySubject.get(row.subjectId) ?? new Set<string>();
+    set.add(row.prompt);
+    openBySubject.set(row.subjectId, set);
+  }
+  const byCard = new Map(items.map((item) => [item.id, item]));
+  const tasks: Array<{ subjectId: number; prompt: ReviewPrompt; resumed: true }> = [];
+  for (const subjectId of subjectOrder) {
+    const item = byCard.get(subjectId);
+    const done = openBySubject.get(subjectId);
+    if (!item || !done?.size) continue;
+    for (const prompt of item.prompts) {
+      if (done.has(prompt)) continue;
+      if (prompt !== "meaning" && prompt !== "reading" && prompt !== "word") continue;
+      tasks.push({ subjectId, prompt, resumed: true });
+    }
+  }
+  return tasks;
+}
+
 export function buildReviewQueue<T extends { subjectId: number; prompt: string }>(options: {
   restored: readonly T[];
   due: readonly T[];

@@ -100,7 +100,6 @@ export function MojiMoriLessonSession({ ids }: { ids?: number[] }) {
   const [quizTotal, setQuizTotal] = useState(0);
   const [draft, setDraft] = useState("");
   const [pending, setPending] = useState<null | "ok" | "miss">(null);
-  const [notice, setNotice] = useState("");
   const [missText, setMissText] = useState("");
   const [shaking, setShaking] = useState(false);
   const [hotkeys, setHotkeys] = useState(false);
@@ -109,6 +108,7 @@ export function MojiMoriLessonSession({ ids }: { ids?: number[] }) {
   const [infoDenied, setInfoDenied] = useState(false);
   const [missTint, setMissTint] = useState(false);
   const [browse, setBrowse] = useState<number[]>([]);
+  const [quizInfoStack, setQuizInfoStack] = useState<number[]>([]);
   const [playing, setPlaying] = useState<string | null>(null);
   const [wordMethod, setWordMethod] = useState<"meaning" | "kanji">("kanji");
   const [wordHint, setWordHint] = useState(0);
@@ -142,6 +142,15 @@ export function MojiMoriLessonSession({ ids }: { ids?: number[] }) {
   const detail = detailQuery.data?.id === activeId ? detailQuery.data : null;
   const browseId = browse.length > 0 ? browse[browse.length - 1]! : null;
   const browseQuery = useMojiMoriSubject(browseId);
+  const quizInfoViewId =
+    phase === "quiz" && sheet === "info"
+      ? quizInfoStack.length > 0
+        ? quizInfoStack[quizInfoStack.length - 1]!
+        : activeId
+      : null;
+  const quizInfoQuery = useMojiMoriSubject(quizInfoViewId);
+  const quizInfoDetail =
+    quizInfoQuery.data?.id === quizInfoViewId ? quizInfoQuery.data : null;
   const activeCard = order?.find((item) => item.id === activeId) ?? card;
   const slides = useMemo(
     () => (activeCard && phase === "teach" ? slidesFor(activeCard, detail) : []),
@@ -150,7 +159,12 @@ export function MojiMoriLessonSession({ ids }: { ids?: number[] }) {
 
   useEffect(() => {
     setBrowse([]);
+    setQuizInfoStack([]);
   }, [card?.id]);
+
+  useEffect(() => {
+    setQuizInfoStack([]);
+  }, [task?.id]);
 
   useEffect(() => {
     if (!browseId) return;
@@ -276,7 +290,6 @@ export function MojiMoriLessonSession({ ids }: { ids?: number[] }) {
     setTasks(queued);
     setDraft("");
     setPending(null);
-    setNotice("");
     setMissText("");
     setSheet("none");
     setInfoDenied(false);
@@ -293,7 +306,6 @@ export function MojiMoriLessonSession({ ids }: { ids?: number[] }) {
     const current = tasks[0];
     setPending(null);
     setDraft("");
-    setNotice("");
     setMissText("");
     setMissTint(false);
     setShaking(false);
@@ -348,14 +360,11 @@ export function MojiMoriLessonSession({ ids }: { ids?: number[] }) {
     if (result.shake) {
       if (result.exception === "radicalMeaning") {
         toast(t("mojimori.study.wantKanjiMeaning"));
-        setNotice("");
       } else if (result.exception === "kanjiReading") {
         toast(t("mojimori.study.wantVocabReading"));
-        setNotice("");
       } else if (result.exception === "unusualSpelling") {
         toast(t("mojimori.study.unusualSpelling"));
-        setNotice("");
-      } else setNotice(t("mojimori.study.shake", { type: result.wantedType ?? "" }));
+      } else toast(t("mojimori.study.shake", { type: result.wantedType ?? "" }));
       setShaking(false);
       requestAnimationFrame(() => setShaking(true));
       holdCaret(inputRef.current);
@@ -578,11 +587,11 @@ export function MojiMoriLessonSession({ ids }: { ids?: number[] }) {
         <section className="mm-lesson__sheet mm-lesson__browse">
           <button
             type="button"
-            className="mm-quiz__back"
+            className="moji-btn mm-quiz__back"
             onClick={() => setBrowse((stack) => stack.slice(0, -1))}
           >
-            <ChevronLeft size={16} />
-            {t("mojimori.study.detailBack")}
+            <ChevronLeft size={14} aria-hidden="true" />
+            <span>{t("mojimori.study.detailBack")}</span>
           </button>
           {browseQuery.data ? (
             <ReviewInfo
@@ -591,6 +600,7 @@ export function MojiMoriLessonSession({ ids }: { ids?: number[] }) {
               prompt="meaning"
               playing={playing}
               onPlay={play}
+              showHeadline
               onOpen={(subject) =>
                 setBrowse((stack) =>
                   stack[stack.length - 1] === subject.id ? stack : [...stack, subject.id],
@@ -682,7 +692,6 @@ export function MojiMoriLessonSession({ ids }: { ids?: number[] }) {
               void submitQuiz();
             }}
           >
-            {notice ? <p className="mm-quiz__exception">{notice}</p> : null}
             {drawing && pending == null ? (
               <div
                 ref={methodsRef}
@@ -914,21 +923,43 @@ export function MojiMoriLessonSession({ ids }: { ids?: number[] }) {
               <Volume2 size={16} />
             </button>
           </div>
-          {sheet === "info" && detail ? (
+          {sheet === "info" ? (
             <div className="mm-quiz__sheet">
-              <ReviewInfo
-                key={detail.id}
-                detail={detail}
-                prompt={task.prompt === "word" ? "meaning" : task.prompt}
-                playing={playing}
-                onPlay={play}
-                onOpen={(subject) => setBrowse([subject.id])}
-              />
-            </div>
-          ) : null}
-          {sheet === "info" && !detail ? (
-            <div className="mm-quiz__sheet">
-              <MojiMoriLoading shape="lines" />
+              {quizInfoStack.length > 0 ? (
+                <button
+                  type="button"
+                  className="moji-btn mm-quiz__back"
+                  onClick={() => setQuizInfoStack((stack) => stack.slice(0, -1))}
+                >
+                  <ChevronLeft size={14} aria-hidden="true" />
+                  <span>{t("mojimori.study.detailBack")}</span>
+                </button>
+              ) : null}
+              {quizInfoDetail ? (
+                <ReviewInfo
+                  key={quizInfoDetail.id}
+                  detail={quizInfoDetail}
+                  prompt={
+                    quizInfoStack.length === 0
+                      ? task.prompt === "word"
+                        ? "meaning"
+                        : task.prompt
+                      : "meaning"
+                  }
+                  playing={playing}
+                  onPlay={play}
+                  showHeadline={quizInfoStack.length > 0}
+                  onOpen={(subject) =>
+                    setQuizInfoStack((stack) =>
+                      stack[stack.length - 1] === subject.id
+                        ? stack
+                        : [...stack, subject.id],
+                    )
+                  }
+                />
+              ) : (
+                <MojiMoriLoading shape="lines" />
+              )}
             </div>
           ) : null}
           {sheet === "kana" ? (

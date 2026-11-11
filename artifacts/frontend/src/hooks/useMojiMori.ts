@@ -221,6 +221,21 @@ export function mojiMoriReviewsQuery() {
   };
 }
 
+export function mojiMoriReviewResumeQuery() {
+  return {
+    queryKey: ["mojimori", "review-resume"] as const,
+    queryFn: async () => {
+      const { flushReviewOutbox, readReviewResume } = await import("../lib/reviewProgress");
+      try {
+        await flushReviewOutbox();
+      } catch {
+        // Resume still reflects what the server stored.
+      }
+      return readReviewResume();
+    },
+  };
+}
+
 export function useMojiMoriReviews(enabled = true) {
   return useQuery({
     ...mojiMoriReviewsQuery(),

@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useLocation } from "wouter";
 import Skeleton from "@/components/smoothui/skeleton";
-import { startRouteProgress, stopRouteProgress } from "./navigationProgress";
+import { progressSnapshot, startRouteProgress, stopRouteProgress } from "./navigationProgress";
 
 type MojiMoriLoadingProps = {
   /** Small placeholder inside an already-visible panel. */
@@ -11,8 +11,11 @@ type MojiMoriLoadingProps = {
 export function MojiMoriLoading({ shape = "page" }: MojiMoriLoadingProps) {
   useEffect(() => {
     if (shape !== "page") return;
-    startRouteProgress();
-    return () => stopRouteProgress();
+    const navActive = progressSnapshot().visible;
+    if (!navActive) startRouteProgress();
+    return () => {
+      if (!navActive) stopRouteProgress();
+    };
   }, [shape]);
 
   if (shape === "tiles") return <TileSkeleton />;

@@ -118,6 +118,59 @@ export function SubjectTile({
   );
 }
 
+export function ComposeSubjectGrid({
+  subjects,
+  onOpen,
+  reading = true,
+}: {
+  subjects: MojiMoriSubjectSummary[];
+  onOpen?: (subject: MojiMoriSubjectSummary) => void;
+  reading?: boolean;
+}) {
+  return (
+    <div className="mm-compose">
+      {subjects.map((subject) => (
+        <ComposeSubjectItem
+          key={subject.id}
+          subject={subject}
+          onOpen={onOpen}
+          reading={reading}
+        />
+      ))}
+    </div>
+  );
+}
+
+export function ComposeSubjectItem({
+  subject,
+  onOpen,
+  reading = true,
+}: {
+  subject: MojiMoriSubjectSummary;
+  onOpen?: (subject: MojiMoriSubjectSummary) => void;
+  /** When false, only the meaning line is shown (e.g. radical rows in kanji composition). */
+  reading?: boolean;
+}) {
+  const [, navigate] = useLocation();
+  return (
+    <button
+      type="button"
+      className="mm-compose__item"
+      onClick={() => (onOpen ? onOpen(subject) : navigate(mojiMoriSubjectHref(subject)))}
+    >
+      <span className="mm-compose__glyph" aria-hidden="true">
+        <ProgressSquare subject={subject} size="sm" />
+      </span>
+      <span className="mm-compose__meta">
+        {reading && subject.primaryReading ? (
+          <b lang="ja">{subject.primaryReading}</b>
+        ) : null}
+        <small>{subject.primaryMeaning}</small>
+      </span>
+    </button>
+  );
+}
+
 export function LevelSubjectCard({
   subject,
   caption = true,

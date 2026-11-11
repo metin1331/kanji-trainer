@@ -7,6 +7,7 @@ import {
   mojiMoriLessonsQuery,
   mojiMoriLevelsQuery,
   mojiMoriReviewsQuery,
+  mojiMoriReviewResumeQuery,
   mojiMoriSettingsQuery,
   mojiMoriSubjectByKeyQuery,
   mojiMoriSubjectQuery,
@@ -232,7 +233,11 @@ async function warm(dest: string, client: QueryClient) {
     return;
   }
   if (path === "/mojimori/reviews") {
-    await client.prefetchQuery(mojiMoriReviewsQuery());
+    await Promise.all([
+      client.prefetchQuery(mojiMoriReviewsQuery()),
+      client.prefetchQuery(mojiMoriSettingsQuery()),
+      client.prefetchQuery(mojiMoriReviewResumeQuery()),
+    ]);
     return;
   }
   if (path === "/mojimori/extra") {
@@ -303,7 +308,13 @@ function ready(dest: string, client: QueryClient) {
     const first = lessons?.items[0];
     return !first || isFresh(client, mojiMoriSubjectQuery(first.id).queryKey);
   }
-  if (path === "/mojimori/reviews") return isFresh(client, mojiMoriReviewsQuery().queryKey);
+  if (path === "/mojimori/reviews") {
+    return (
+      isFresh(client, mojiMoriReviewsQuery().queryKey) &&
+      isFresh(client, mojiMoriSettingsQuery().queryKey) &&
+      isFresh(client, mojiMoriReviewResumeQuery().queryKey)
+    );
+  }
   if (path === "/mojimori/extra") {
     const mode = search.get("mode") ?? "recent-lessons";
     if (mode !== "recent-lessons" && mode !== "recent-mistakes" && mode !== "cooked") return true;

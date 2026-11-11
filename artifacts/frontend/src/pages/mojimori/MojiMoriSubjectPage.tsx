@@ -26,7 +26,13 @@ import {
 import NotFound from "../not-found";
 import { MojiMoriLayout } from "./MojiMoriLayout";
 import { MnemonicText } from "./MnemonicText";
-import { LevelSubjectCard, StudyItem, SubjectTileGrid, visualMode } from "./SubjectTile";
+import {
+  ComposeSubjectGrid,
+  LevelSubjectCard,
+  StudyItem,
+  SubjectTileGrid,
+  visualMode,
+} from "./SubjectTile";
 
 const NOTE_LIMIT = 500;
 
@@ -468,25 +474,29 @@ export function MojiMoriSubjectPage() {
 
         {data.objectType === "kanji" && similar.length > 0 ? (
           <Section id="similar" title={t("mojimori.visuallySimilar")}>
-            <SubjectCards subjects={similar} />
+            <ComposeSubjectGrid subjects={similar} />
           </Section>
         ) : null}
 
         {data.objectType === "kanji" ? (
           <Section id="amalgamations" title={t("mojimori.foundInVocabulary")}>
-            <SubjectCards subjects={found} />
+            <ComposeSubjectGrid subjects={found} />
           </Section>
         ) : null}
 
         {data.objectType === "radical" && data.related.amalgamations.length > 0 ? (
           <Section id="kanji" title={t("mojimori.foundInKanji")}>
-            <SubjectCards subjects={data.related.amalgamations} />
+            <div className="mm-compose">
+              {data.related.amalgamations.map((subject) => (
+                <LevelSubjectCard key={subject.id} subject={subject} />
+              ))}
+            </div>
           </Section>
         ) : null}
 
         {data.objectType !== "kanji" && similar.length > 0 ? (
           <Section id="similar" title={t("mojimori.visuallySimilar")}>
-            <SubjectCards subjects={similar} />
+            <ComposeSubjectGrid subjects={similar} />
           </Section>
         ) : null}
 
