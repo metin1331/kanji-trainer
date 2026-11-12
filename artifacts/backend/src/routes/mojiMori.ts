@@ -16,7 +16,7 @@ import {
   progressView,
   type MojiMoriProgressView,
 } from "../lib/mojiMoriProgress";
-import { studySnapshot, lessonPicker, lessonQueue, reviewQueue, extraQueue, gradeStudyItem, gradeStudyBatch, acceptReviewPrompt, readReviewResume, saveReviewCheckpoint, deleteReviewCheckpoint, dropCheckpointTask, checkStudyAnswer, checkWordAnswer, updateStudySettings, studySettings, saveSubjectNotes, unburnSubject, subjectAnswerStats, type ExtraMode, type StudyKind } from "../lib/mojiMoriStudy";
+import { studySnapshot, lessonPicker, lessonQueue, reviewQueue, reviewCards, extraQueue, gradeStudyItem, gradeStudyBatch, acceptReviewPrompt, readReviewResume, saveReviewCheckpoint, deleteReviewCheckpoint, dropCheckpointTask, checkStudyAnswer, checkWordAnswer, updateStudySettings, studySettings, saveSubjectNotes, unburnSubject, subjectAnswerStats, type ExtraMode, type StudyKind } from "../lib/mojiMoriStudy";
 import { isReviewPrompt } from "../lib/mojiMoriReviewProgress";
 import { COMPLETED_STAGE } from "../lib/mojiMoriUnlock";
 
@@ -384,6 +384,15 @@ router.get("/mojimori/study/lessons", async (req, res, next) => {
 router.get("/mojimori/study/reviews", async (req, res, next) => {
   try {
     res.json(await reviewQueue(getUserId(req)));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get("/mojimori/study/reviews/cards", async (req, res, next) => {
+  try {
+    const ids = parseIdList(req.query.ids) ?? [];
+    res.json(await reviewCards(getUserId(req), ids.slice(0, 8)));
   } catch (err) {
     next(err);
   }

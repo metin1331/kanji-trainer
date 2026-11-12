@@ -712,10 +712,9 @@ function shuffle<T>(items: T[]): T[] {
   return copy;
 }
 
-export async function reviewQueue(userId: number) {
-  const settings = await studySettings(userId);
+async function reviewDueRows(userId: number) {
   const now = new Date();
-  const rows = await db
+  return db
     .select({
       id: mojiMoriSubjectsTable.id,
       objectType: mojiMoriSubjectsTable.objectType,
@@ -743,6 +742,11 @@ export async function reviewQueue(userId: number) {
         or(isNull(mojiMoriProgressTable.availableAt), lte(mojiMoriProgressTable.availableAt, now)),
       ),
     );
+}
+
+export async function reviewQueue(userId: number) {
+  const settings = await studySettings(userId);
+  const rows = await reviewDueRows(userId);
   const ordered =
     settings.reviewOrder === "lower-stage"
       ? [...rows].sort((a, b) => a.srsStage - b.srsStage || a.level - b.level)
@@ -753,11 +757,46 @@ export async function reviewQueue(userId: number) {
               (a, b) => Number(b.srsStage <= 4) - Number(a.srsStage <= 4) || a.srsStage - b.srsStage,
             )
           : shuffle(rows);
+  const lookup = await componentLookup(ordered.flatMap((row) => row.componentSubjectIds ?? []));
   return {
     due: rows.length,
     apprenticeDue: rows.filter((row) => row.srsStage <= 4).length,
-    items: await quizCards(ordered),
+    items: ordered.map((row) => reviewOutline(row, lookup)),
   };
+}
+
+function reviewOutline(
+  row: QuizSource,
+  lookup: Awaited<ReturnType<typeof componentLookup>>,
+) {
+  const wordKanji = compositionKanji(row.componentSubjectIds ?? [], (id) => lookup.get(id));
+  const prompts = promptsFor(row.objectType);
+  const withWord = row.objectType === "vocabulary" && wordKanji.length > 0;
+  return {
+    id: row.id,
+    objectType: row.objectType,
+    level: row.level,
+    characters: row.characters,
+    characterImages: row.characterImages,
+    pronunciationAudios: row.pronunciationAudios ?? [],
+    srsStage: row.srsStage,
+    prompts: withWord ? [...prompts, "word" as const] : prompts,
+    wordKanji: withWord ? wordKanji : [],
+    wordReading: withWord ? primaryReading(row.readings ?? []) : "",
+    wordMeaning: withWord ? primaryMeaning(row.meanings ?? []) : "",
+  };
+}
+
+/** Full quiz payload for the next cards in an already ordered review. */
+export async function reviewCards(userId: number, ids: number[]) {
+  const wanted = new Set(ids);
+  const rows = (await reviewDueRows(userId)).filter((row) => wanted.has(row.id));
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  const ordered = ids.flatMap((id) => {
+    const row = byId.get(id);
+    return row ? [row] : [];
+  });
+  return { items: await quizCards(ordered) };
 }
 
 export async function extraQueue(userId: number, mode: ExtraMode) {
@@ -1399,7 +1438,12 @@ export async function studySnapshot(userId: number) {
   const settings = await studySettings(userId);
   const lessons = await lessonCandidates(userId, settings.level);
   const done = await lessonsDoneToday(userId);
-  const reviews = await reviewQueue(userId);
+  const dueRows = await reviewDueRows(userId);
+  const reviews = {
+    due: dueRows.length,
+    apprenticeDue: dueRows.filter((row) => row.srsStage <= 4).length,
+    items: dueRows,
+  };
   const lessonLimit =
     settings.dailyLessonCap === 0
       ? lessons.length

@@ -2459,6 +2459,10 @@ button.forecast-row {
 .mm-quiz-page {
   max-width: 52rem;
   margin: 0 auto;
+
+  @media (min-width: 720px) {
+    padding: 4rem 0;
+  }
 }
 
 .mm-quiz {

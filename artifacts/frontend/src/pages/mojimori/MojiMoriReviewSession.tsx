@@ -35,6 +35,7 @@ import {
   useMojiMoriNotes,
   useMojiMoriReviews,
   useMojiMoriStudySettings,
+  mojiMoriReviewCardsQuery,
   mojiMoriReviewResumeQuery,
   mojiMoriSubjectQuery,
   useMojiMoriSubject,
@@ -72,6 +73,7 @@ import {
 } from "./SubjectTile";
 import { audioTracks, pickVoice, type AudioTrack } from "./mojiVoice";
 import { placeDrawingLast } from "./quizOrder";
+import { currentReviewBoot, releaseReviewBoot, retainReviewBoot } from "./reviewBoot";
 import { KanjiReview, KanjiStrokeQuiz, WordReveal } from "./KanjiStrokeQuiz";
 import { StrokeGlyphTrigger } from "./MojiStrokeModal";
 import {
@@ -364,10 +366,15 @@ export function MojiMoriReviewSession({
   const extra = useMojiMoriExtra(extraMode, source === "extra");
   const feed = source === "extra" ? extra : reviews;
   const studyFlush = useStudyFlush(source === "extra" ? "extra" : "review");
-  const [cards, setCards] = useState<MojiMoriStudyCard[] | null>(null);
-  const [queue, setQueue] = useState<Task[]>([]);
-  const [records, setRecords] = useState<Record<number, ItemRecord>>({});
-  const recordsRef = useRef<Record<number, ItemRecord>>({});
+  const [boot] = useState(() => {
+    if (source !== "review") return null;
+    retainReviewBoot();
+    return currentReviewBoot();
+  });
+  const [cards, setCards] = useState<MojiMoriStudyCard[] | null>(boot?.items ?? null);
+  const [queue, setQueue] = useState<Task[]>(boot?.queue ?? []);
+  const [records, setRecords] = useState<Record<number, ItemRecord>>(boot?.records ?? {});
+  const recordsRef = useRef<Record<number, ItemRecord>>(boot?.records ?? {});
   const [recent, setRecent] = useState<number[]>([]);
   const [draft, setDraft] = useState("");
   const [mode, setMode] = useState<"ask" | "miss">("ask");
@@ -432,6 +439,13 @@ export function MojiMoriReviewSession({
   const queryClient = useQueryClient();
   const ready = cards != null;
   const reviewResumePending = source === "review" && resumeQuery.isPending;
+  const hydrating = useRef(new Set<number>());
+
+  useEffect(() => {
+    if (!boot) return;
+    retainReviewBoot();
+    return () => releaseReviewBoot();
+  }, [boot]);
 
   useEffect(() => {
     if (source !== "review" || !resumeQuery.data) return;
@@ -574,6 +588,31 @@ export function MojiMoriReviewSession({
     () => new Map((cards ?? []).map((card) => [card.id, card])),
     [cards],
   );
+
+  useEffect(() => {
+    if (source !== "review" || !ready) return;
+    const needed: number[] = [];
+    for (const task of queue) {
+      if (!needed.includes(task.subjectId)) needed.push(task.subjectId);
+      if (needed.length >= 2) break;
+    }
+    const missing = needed.filter(
+      (id) => !byId.get(id)?.gradeKey && !hydrating.current.has(id),
+    );
+    if (missing.length === 0) return;
+    for (const id of missing) hydrating.current.add(id);
+    void queryClient
+      .fetchQuery(mojiMoriReviewCardsQuery(missing))
+      .then((data) => {
+        const loaded = new Map(data.items.map((item) => [item.id, item]));
+        setCards((current) =>
+          (current ?? []).map((item) => loaded.get(item.id) ?? item),
+        );
+      })
+      .finally(() => {
+        for (const id of missing) hydrating.current.delete(id);
+      });
+  }, [source, ready, queue, byId, queryClient]);
   const current = queue[0];
   const card = current ? byId.get(current.subjectId) : undefined;
   const infoOn = sheet === "info" && Boolean(card);
@@ -1327,7 +1366,16 @@ export function MojiMoriReviewSession({
   }
 
   const page = (() => {
-    if (feed.isLoading || !settingsReady || !ready || reviewResumePending)
+    const headNeedsCard =
+      source === "review" && Boolean(current) && !card?.gradeKey;
+    if (
+      !boot &&
+      (feed.isLoading ||
+        !settingsReady ||
+        !ready ||
+        reviewResumePending ||
+        headNeedsCard)
+    )
       return <MojiMoriLoading />;
     if (!card || !current) {
       if (source === "review" && total > 0) {

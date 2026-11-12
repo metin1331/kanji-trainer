@@ -236,6 +236,20 @@ export function mojiMoriReviewResumeQuery() {
   };
 }
 
+export function mojiMoriReviewCardsQuery(ids: number[]) {
+  const key = [...ids].sort((a, b) => a - b).join(",");
+  return {
+    queryKey: ["mojimori", "review-cards", key] as const,
+    staleTime: 60_000,
+    queryFn: async () => {
+      const res = await apiFetch(`/api/mojimori/study/reviews/cards?ids=${key}`);
+      return parseJson<{
+        items: import("../lib/mojiMori").MojiMoriStudyCard[];
+      }>(res);
+    },
+  };
+}
+
 export function useMojiMoriReviews(enabled = true) {
   return useQuery({
     ...mojiMoriReviewsQuery(),
