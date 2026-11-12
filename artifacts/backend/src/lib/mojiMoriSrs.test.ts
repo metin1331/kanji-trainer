@@ -125,6 +125,15 @@ describe("one prompt at a time", () => {
     assert.equal(checked.multipleReadings, false);
   });
 
+  it("accepts katakana when the taught vocabulary reading is hiragana", () => {
+    const meanings = [{ meaning: "Apple", acceptedAnswer: true }];
+    const readings = [{ reading: "りんご", primary: true, acceptedAnswer: true }];
+    const ok = checkPrompt("vocabulary", meanings, readings, "reading", "リンゴ");
+    assert.equal(ok.correct, true);
+    const alt = checkPrompt("vocabulary", meanings, readings, "reading", "りんご");
+    assert.equal(alt.correct, true);
+  });
+
   it("shakes when the kanji reading is entered for a vocabulary", () => {
     const sun = [{ meaning: "Sun", acceptedAnswer: true }];
     const vocab = [{ reading: "ひ", primary: true, acceptedAnswer: true }];

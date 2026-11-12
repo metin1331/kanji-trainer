@@ -246,7 +246,12 @@ export const ToastList = () => {
   const { toasts } = useToastManager();
 
   return toasts.map((item) => (
-    <ToastRoot key={item.id} toast={item}>
+    <ToastRoot
+      key={item.id}
+      toast={item}
+      className="cursor-pointer"
+      onClick={() => toast.close(item.id)}
+    >
       <ToastContent>
         <div className="min-w-0 flex-1">
           <ToastTitle />

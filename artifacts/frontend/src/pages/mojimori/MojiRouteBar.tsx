@@ -8,22 +8,18 @@ import {
   subscribeProgress,
 } from "./navigationProgress";
 
-export function MojiRouteBar() {
-  const client = useQueryClient();
-  const reduceMotion = useReducedMotion();
-  const [snap, setSnap] = useState(progressSnapshot);
-
-  useEffect(() => {
-    installMojiMoriNavigation(client);
-  }, [client]);
-
-  useEffect(() => subscribeProgress(setSnap), []);
-
-  if (!snap.visible) return null;
-
+function RouteProgressTrack({
+  className,
+  snap,
+  reduceMotion,
+}: {
+  className?: string;
+  snap: ReturnType<typeof progressSnapshot>;
+  reduceMotion: boolean | null;
+}) {
   return (
     <div
-      className="moji-route-bar pointer-events-none fixed inset-x-0 top-[3.20rem] min-[960px]:top-0 z-[400] h-1 overflow-hidden"
+      className={className}
       role="progressbar"
       aria-label="Loading"
       aria-valuemin={0}
@@ -44,5 +40,42 @@ export function MojiRouteBar() {
         }}
       />
     </div>
+  );
+}
+
+/** Shown at the top of quiz complete panels while navigating away. */
+export function CompleteRouteProgress() {
+  const reduceMotion = useReducedMotion();
+  const [snap, setSnap] = useState(progressSnapshot);
+  useEffect(() => subscribeProgress(setSnap), []);
+  if (!snap.visible) return null;
+  return (
+    <RouteProgressTrack
+      snap={snap}
+      reduceMotion={reduceMotion}
+      className="review-complete__route pointer-events-none absolute inset-x-0 top-0 z-10 h-1 overflow-hidden"
+    />
+  );
+}
+
+export function MojiRouteBar() {
+  const client = useQueryClient();
+  const reduceMotion = useReducedMotion();
+  const [snap, setSnap] = useState(progressSnapshot);
+
+  useEffect(() => {
+    installMojiMoriNavigation(client);
+  }, [client]);
+
+  useEffect(() => subscribeProgress(setSnap), []);
+
+  if (!snap.visible) return null;
+
+  return (
+    <RouteProgressTrack
+      snap={snap}
+      reduceMotion={reduceMotion}
+      className="moji-route-bar pointer-events-none fixed inset-x-0 top-[3.20rem] min-[960px]:top-0 z-[400] h-1 overflow-hidden"
+    />
   );
 }

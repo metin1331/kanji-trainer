@@ -15,6 +15,17 @@ function getKanjiChars(str: string): string[] {
   });
 }
 
+function orderedKanjiChars(str: string): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const c of getKanjiChars(str)) {
+    if (seen.has(c)) continue;
+    seen.add(c);
+    out.push(c);
+  }
+  return out;
+}
+
 function charToHex(char: string): string {
   return (char.codePointAt(0) ?? 0).toString(16).padStart(5, "0");
 }
@@ -62,7 +73,7 @@ interface Props {
 
 export function KanjiStrokeModal({ kanji, onClose, variant = "modal" }: Props) {
   const { t } = useTranslation();
-  const chars = getKanjiChars(kanji);
+  const chars = orderedKanjiChars(kanji);
   const [charIndex, setCharIndex] = useState(0);
   const [svgContent, setSvgContent] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);

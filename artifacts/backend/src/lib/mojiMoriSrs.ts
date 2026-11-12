@@ -295,10 +295,10 @@ export function checkPrompt(
   if (/[a-zA-Z]/.test(input)) {
     return { ...flags, correct: false, shake: true, wantedType: "reading" };
   }
-  const match = acceptedReadings.find(
-    (item) => normalizeReading(item.reading) === input,
-  );
   const keyed = readingKey(answer);
+  const match = acceptedReadings.find(
+    (item) => keyed.length > 0 && readingKey(item.reading) === keyed,
+  );
   const wrongType = readings.find(
     (item) =>
       Boolean(item.type) &&
@@ -373,10 +373,11 @@ export function gradeAnswers(
     const input = normalizeReading(reading ?? "");
     const primary = readings.find((item) => item.primary) ?? readings.find((item) => item.acceptedAnswer);
     wantedType = primary?.type ?? null;
-    const match = readings.find(
-      (item) => item.acceptedAnswer && normalizeReading(item.reading) === input,
-    );
     const keyed = readingKey(reading ?? "");
+    const match = readings.find(
+      (item) =>
+        item.acceptedAnswer && keyed.length > 0 && readingKey(item.reading) === keyed,
+    );
     const wrongType = readings.find(
       (item) =>
         Boolean(item.type) &&

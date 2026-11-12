@@ -36,7 +36,9 @@ export function progressSnapshot() {
 
 export function subscribeProgress(listener: (snap: Snap) => void) {
   listeners.add(listener);
-  return () => listeners.delete(listener);
+  return () => {
+    listeners.delete(listener);
+  };
 }
 
 export function startRouteProgress() {

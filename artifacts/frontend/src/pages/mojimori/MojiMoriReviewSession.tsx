@@ -63,6 +63,7 @@ import { MnemonicText } from "./MnemonicText";
 import { ProgressSquare } from "./SubjectTile";
 import type { MojiMoriSubjectSummary } from "../../lib/mojiMori";
 import { MojiMoriLayout } from "./MojiMoriLayout";
+import { CompleteRouteProgress } from "./MojiRouteBar";
 import {
   ComposeSubjectGrid,
   ComposeSubjectItem,
@@ -72,6 +73,7 @@ import {
 import { audioTracks, pickVoice, type AudioTrack } from "./mojiVoice";
 import { placeDrawingLast } from "./quizOrder";
 import { KanjiReview, KanjiStrokeQuiz, WordReveal } from "./KanjiStrokeQuiz";
+import { StrokeGlyphTrigger } from "./MojiStrokeModal";
 import {
   nextReviewQueue,
   rememberLapse,
@@ -163,6 +165,7 @@ const KANA_PAGES: {
     label: "あ",
     cells: [
       ["あ", "a"],
+      ["ー", "—"],
       ["い", "i"],
       ["う", "u"],
       ["え", "e"],
@@ -295,7 +298,6 @@ const KANA_PAGES: {
       ["を", "wo"],
       ["ん", "n"],
       ["っ", "ltu"],
-      ["ー", "-"],
     ],
   },
 ];
@@ -950,7 +952,12 @@ export function MojiMoriReviewSession({
     setMissTint(true);
   }
 
+  function dismissQuizToast() {
+    toast.dismissNow();
+  }
+
   function toggleInfo() {
+    dismissQuizToast();
     if (!card || !current) return;
     const answered =
       missTint ||
@@ -982,6 +989,7 @@ export function MojiMoriReviewSession({
   }
 
   function toggleWrap() {
+    dismissQuizToast();
     if (inLapses.current) return;
     setWrapUp((on) => {
       if (!on) {
@@ -1286,9 +1294,11 @@ export function MojiMoriReviewSession({
         toggleInfo();
       } else if (event.key === ",") {
         event.preventDefault();
+        dismissQuizToast();
         setSheet((open) => (open === "last" ? "none" : "last"));
       } else if (event.key === "/") {
         event.preventDefault();
+        dismissQuizToast();
         setSheet((open) => (open === "kana" ? "none" : "kana"));
       } else if (
         (event.key === "j" || event.key === "J") &&
@@ -1329,6 +1339,7 @@ export function MojiMoriReviewSession({
             correct={correct}
             percent={percent}
             onHome={finishHome}
+            title={t("mojimori.study.reviewsDone")}
           />
         );
       }
@@ -1450,7 +1461,8 @@ export function MojiMoriReviewSession({
               </span>
             </div>
           </div>
-          <div
+          <StrokeGlyphTrigger
+            card={card}
             className={`mm-quiz__glyph ${current.prompt === "word" ? "is-word" : ""}`}
           >
             {source === "extra" ? (
@@ -1476,7 +1488,7 @@ export function MojiMoriReviewSession({
                 {card.characters}
               </p>
             ) : null}
-          </div>
+          </StrokeGlyphTrigger>
           <div className="mm-quiz__stage-footer">
             <AnimatePresence>
               {showSrs && srsFlash ? (
@@ -1745,7 +1757,10 @@ export function MojiMoriReviewSession({
             type="button"
             className={`mm-quiz__tool ${wrapUp ? "is-on mm-quiz__tool--count" : ""}`}
             disabled={lapsesOn}
-            onClick={toggleWrap}
+            onClick={() => {
+              dismissQuizToast();
+              toggleWrap();
+            }}
           >
             <span>{t("mojimori.study.wrapUp")}</span>
             <Clock size={16} />
@@ -1754,9 +1769,10 @@ export function MojiMoriReviewSession({
           <button
             type="button"
             className={`mm-quiz__tool ${sheet === "last" ? "is-on" : ""}`}
-            onClick={() =>
-              setSheet((open) => (open === "last" ? "none" : "last"))
-            }
+            onClick={() => {
+              dismissQuizToast();
+              setSheet((open) => (open === "last" ? "none" : "last"));
+            }}
           >
             <span>{t("mojimori.study.lastAnswers")}</span>
             <ListChecks size={16} />
@@ -1779,9 +1795,10 @@ export function MojiMoriReviewSession({
           <button
             type="button"
             className={`mm-quiz__tool ${sheet === "kana" ? "is-on" : ""}`}
-            onClick={() =>
-              setSheet((open) => (open === "kana" ? "none" : "kana"))
-            }
+            onClick={() => {
+              dismissQuizToast();
+              setSheet((open) => (open === "kana" ? "none" : "kana"));
+            }}
           >
             <span>{t("mojimori.study.kanaChart")}</span>
             <b lang="ja">ひ</b>
@@ -1792,6 +1809,7 @@ export function MojiMoriReviewSession({
             disabled={!audioEnabled}
             title={t("mojimori.playAudio")}
             onClick={() => {
+              dismissQuizToast();
               const track = pickVoice(
                 tracks,
                 prefs.data?.preferredVoice ?? "random",
@@ -1885,7 +1903,7 @@ export function MojiMoriReviewSession({
   );
 }
 
-function studyCardToSummary(card: MojiMoriStudyCard): MojiMoriSubjectSummary {
+export function studyCardToSummary(card: MojiMoriStudyCard): MojiMoriSubjectSummary {
   const primaryMeaning =
     card.wordMeaning ??
     card.meanings?.find((item) => item.primary)?.meaning ??
@@ -1919,13 +1937,14 @@ function reviewOutcome(record: ItemRecord, prompts: readonly Prompt[]) {
   return ok ? "correct" : "incorrect";
 }
 
-function ReviewCompletePanel({
+export function ReviewCompletePanel({
   cards,
   records,
   asked,
   correct,
   percent,
   onHome,
+  title,
 }: {
   cards: MojiMoriStudyCard[];
   records: Record<number, ItemRecord>;
@@ -1933,6 +1952,7 @@ function ReviewCompletePanel({
   correct: number;
   percent: number;
   onHome: () => void;
+  title: string;
 }) {
   const { t } = useTranslation();
   const [sheetOn, setSheetOn] = useState(false);
@@ -1991,10 +2011,9 @@ function ReviewCompletePanel({
 
   return (
     <section className="glass-panel level-progress review-complete">
+      <CompleteRouteProgress />
       <div className="review-complete__inner p-6 sm:p-8">
-        <h1 className="review-complete__title">
-          {t("mojimori.study.reviewsDone")}
-        </h1>
+        <h1 className="review-complete__title">{title}</h1>
         <div className="review-complete__stats">
           <article className="level-type-card review-complete__stat p-3 text-left">
             <p className="review-complete__stat-label">
@@ -2299,6 +2318,13 @@ export function ReviewInfo({
         ) : null}
         <h3>{storyLabel}</h3>
         <MnemonicText text={detail.meaningMnemonic} />
+        {detail.objectType === "radical" && detail.mnemonicImageUrl ? (
+          <img
+            className="moji-mnemonic-image"
+            src={detail.mnemonicImageUrl}
+            alt=""
+          />
+        ) : null}
         <Hint text={detail.meaningHint} />
         <NoteBox detail={detail} field="meaning" />
       </Fold>

@@ -8,6 +8,7 @@ import {
   House,
   Inbox,
   Keyboard,
+  Plus,
   Volume2,
 } from "lucide-react";
 import { MojiMoriLoading } from "./MojiMoriLoading";
@@ -37,9 +38,10 @@ import { audioTracks, pickVoice, type AudioTrack } from "./mojiVoice";
 import { toast } from "@/components/smoothui/toast";
 import { MnemonicText } from "./MnemonicText";
 import { SubjectCharacter } from "./SubjectCharacter";
-import { visualMode } from "./SubjectTile";
-import { KanaPad, ReviewInfo } from "./MojiMoriReviewSession";
+import { ComposeSubjectItem, visualMode } from "./SubjectTile";
+import { KanaPad, ReviewCompletePanel, ReviewInfo } from "./MojiMoriReviewSession";
 import { KanjiReview, KanjiStrokeQuiz, WordReveal } from "./KanjiStrokeQuiz";
+import { StrokeGlyphTrigger } from "./MojiStrokeModal";
 import { beginPress, clearFinishedPress, isHolding, restorePresses, whenPressFinishes } from "./pressBounce";
 import { placeDrawingLast } from "./quizOrder";
 
@@ -47,7 +49,33 @@ type SlideId = "composition" | "meaning" | "reading" | "context";
 type Phase = "teach" | "quiz";
 type Prompt = "meaning" | "reading" | "word";
 type Task = { id: number; prompt: Prompt };
-type Saved = { meaning?: string; reading?: string };
+type Attempt = { answer: string; correct: boolean };
+type Saved = { meaning?: Attempt; reading?: Attempt };
+
+function lessonQuizStats(order: MojiMoriStudyCard[], answers: Record<number, Saved>) {
+  let asked = 0;
+  let correct = 0;
+  for (const card of order) {
+    const saved = answers[card.id];
+    if (!saved) continue;
+    for (const prompt of card.prompts) {
+      if (prompt === "word") continue;
+      const row = saved[prompt];
+      if (row) {
+        asked += 1;
+        if (row.correct) correct += 1;
+      }
+    }
+  }
+  const percent = asked === 0 ? 100 : Math.round((100 * correct) / asked);
+  return { asked, correct, percent };
+}
+
+function lessonRecordsFromAnswers(
+  answers: Record<number, Saved>,
+): Record<number, { meaning?: Attempt; reading?: Attempt }> {
+  return answers;
+}
 
 function holdCaret(input: HTMLInputElement | null) {
   const place = () => {
@@ -364,7 +392,27 @@ export function MojiMoriLessonSession({ ids }: { ids?: number[] }) {
         toast(t("mojimori.study.wantVocabReading"));
       } else if (result.exception === "unusualSpelling") {
         toast(t("mojimori.study.unusualSpelling"));
-      } else toast(t("mojimori.study.shake", { type: result.wantedType ?? "" }));
+      } else if (result.enteredType && result.wantedType) {
+        const readingName = (kind: string) =>
+          kind === "onyomi" || kind === "kunyomi" || kind === "nanori"
+            ? t(`mojimori.${kind}`)
+            : kind;
+        toast(
+          t("mojimori.study.readingType", {
+            answer,
+            entered: readingName(result.enteredType),
+            wanted: readingName(result.wantedType),
+          }),
+        );
+      } else {
+        const wanted =
+          result.wantedType === "meaning"
+            ? t("mojimori.study.lookingMeaning")
+            : result.wantedType === "reading"
+              ? t("mojimori.study.lookingReading")
+              : t("mojimori.study.shake", { type: result.wantedType ?? "" });
+        toast(wanted);
+      }
       setShaking(false);
       requestAnimationFrame(() => setShaking(true));
       holdCaret(inputRef.current);
@@ -375,6 +423,13 @@ export function MojiMoriLessonSession({ ids }: { ids?: number[] }) {
         advanceQuiz("miss");
         return;
       }
+      answers.current = {
+        ...answers.current,
+        [current.id]: {
+          ...answers.current[current.id],
+          [current.prompt]: { answer, correct: false },
+        },
+      };
       toast(
         current.prompt === "word"
           ? t("mojimori.study.helpWord")
@@ -392,13 +447,14 @@ export function MojiMoriLessonSession({ ids }: { ids?: number[] }) {
     else if (current.prompt === "meaning" && result.multipleMeanings) toast(t("mojimori.study.multipleMeanings"));
     if (current.prompt === "reading" && result.multipleReadings) toast(t("mojimori.study.multipleReadings"));
     if (current.prompt !== "word") {
-      const next = { ...answers.current[current.id], [current.prompt]: answer };
+      const attempt = { answer, correct: true };
+      const next = { ...answers.current[current.id], [current.prompt]: attempt };
       answers.current = { ...answers.current, [current.id]: next };
       if (subject.prompts.every((prompt) => prompt === "word" || Boolean(next[prompt]))) {
         studyFlush.queue({
           subjectId: current.id,
-          meaning: next.meaning,
-          reading: next.reading,
+          meaning: next.meaning?.answer,
+          reading: next.reading?.answer,
           expectedStage: 0,
         });
       }
@@ -496,15 +552,20 @@ export function MojiMoriLessonSession({ ids }: { ids?: number[] }) {
   }
 
   const shown = phase === "quiz" && task ? order.find((item) => item.id === task.id) ?? null : card;
-  if (phase === "quiz" && !task) {
+  if (phase === "quiz" && !task && order) {
+    const records = lessonRecordsFromAnswers(answers.current);
+    const stats = lessonQuizStats(order, answers.current);
     return (
-      <div className="mm-lesson__done-wrap">
-        <section className="glass-panel mm-lesson__done">
-          <h1>{t("mojimori.study.lessonsDone")}</h1>
-          <button type="button" className="moji-btn-primary" onClick={finishLesson}>
-            {t("mojimori.study.returnHome")}
-          </button>
-        </section>
+      <div className="mm-quiz-page">
+        <ReviewCompletePanel
+          cards={order}
+          records={records}
+          asked={stats.asked}
+          correct={stats.correct}
+          percent={stats.percent}
+          onHome={finishLesson}
+          title={t("mojimori.study.lessonsDone")}
+        />
       </div>
     );
   }
@@ -528,9 +589,10 @@ export function MojiMoriLessonSession({ ids }: { ids?: number[] }) {
   const showWordSpelling = drawing && wordMethod === "meaning" && spellingHint;
 
   return (
-    <div className="mm-lesson" data-kind={shown.objectType}>
-      <audio ref={audioRef} onEnded={() => setPlaying(null)} />
-      <div className="mm-lesson__card">
+    <div className="mm-quiz-page">
+      <div className="mm-lesson" data-kind={shown.objectType}>
+        <audio ref={audioRef} onEnded={() => setPlaying(null)} />
+        <section className="mm-lesson__card mm-quiz">
       {phase === "quiz" ? (
         <div className="mm-quiz__meter" aria-hidden="true">
           <span
@@ -555,7 +617,10 @@ export function MojiMoriLessonSession({ ids }: { ids?: number[] }) {
             </span>
           </div>
         </div>
-        <div className={`mm-lesson__glyph${drawing ? " is-word" : ""}`}>
+        <StrokeGlyphTrigger
+          card={shown}
+          className={`mm-lesson__glyph${drawing ? " is-word" : ""}`}
+        >
           {drawing ? <span lang="ja">{shown.wordReading || "…"}</span> : <Glyph card={shown} />}
           {showWordMeaning && shown.wordMeaning ? (
             <p className="mm-quiz__word-meaning">{shown.wordMeaning}</p>
@@ -565,7 +630,7 @@ export function MojiMoriLessonSession({ ids }: { ids?: number[] }) {
               {shown.characters}
             </p>
           ) : null}
-        </div>
+        </StrokeGlyphTrigger>
         {phase === "teach" && meaning ? <p className="mm-lesson__meaning">{meaning}</p> : null}
       </header>
       {phase === "quiz" && task ? (
@@ -889,6 +954,7 @@ export function MojiMoriLessonSession({ ids }: { ids?: number[] }) {
                 type="button"
                 className={`mm-quiz__tool${sheet === "info" ? " is-on" : ""}${pending != null || missTint ? "" : " is-locked"}`}
                 onClick={() => {
+                  toast.dismissNow();
                   if (pending == null && !missTint) {
                     setInfoDenied(true);
                     window.setTimeout(() => setInfoDenied(false), 1600);
@@ -908,7 +974,10 @@ export function MojiMoriLessonSession({ ids }: { ids?: number[] }) {
             <button
               type="button"
               className={`mm-quiz__tool${sheet === "kana" ? " is-on" : ""}`}
-              onClick={() => setSheet((open) => (open === "kana" ? "none" : "kana"))}
+              onClick={() => {
+                toast.dismissNow();
+                setSheet((open) => (open === "kana" ? "none" : "kana"));
+              }}
             >
               <span>{t("mojimori.study.kanaChart")}</span>
               <b lang="ja">ひ</b>
@@ -918,7 +987,10 @@ export function MojiMoriLessonSession({ ids }: { ids?: number[] }) {
               className="mm-quiz__tool mm-quiz__tool--icon"
               disabled={task.prompt !== "reading" || audioTracks(detail?.pronunciationAudios).length === 0}
               title={t("mojimori.playAudio")}
-              onClick={playFirst}
+              onClick={() => {
+                toast.dismissNow();
+                playFirst();
+              }}
             >
               <Volume2 size={16} />
             </button>
@@ -985,9 +1057,9 @@ export function MojiMoriLessonSession({ ids }: { ids?: number[] }) {
           ) : null}
         </section>
       ) : null}
-      </div>
+        </section>
 
-      <div className="mm-lesson__footer">
+        <div className="mm-lesson__footer">
         <div className={`mm-lesson__hotkeys${hotkeys ? " is-open" : ""}`}>
           <button
             type="button"
@@ -1014,6 +1086,7 @@ export function MojiMoriLessonSession({ ids }: { ids?: number[] }) {
           ) : null}
         </div>
       </div>
+    </div>
     </div>
   );
 }
@@ -1089,9 +1162,27 @@ function CompositionSlide({
   return (
     <div className="mm-lesson__copy">
       <p>{intro}</p>
-      <div className="mm-lesson__parts">
-        {parts.map((subject) => (
-          <PartTile key={subject.id} subject={subject} onOpen={onOpen} />
+      <div className="mm-compose">
+        {parts.map((subject, index) => (
+          <>
+            {card.objectType === "kanji" ? (
+              <ComposeSubjectItem
+                key={subject.id}
+                subject={subject}
+                onOpen={onOpen}
+                reading={false}
+              />
+            ) : (
+              <PartTile key={subject.id} subject={subject} onOpen={onOpen} />
+            )}
+            {parts.length > 1 && index !== parts.length - 1 ? (
+              <div className="mm-compose__plus" key={`plus-${subject.id}`}>
+                <span>
+                  <Plus size={16} />
+                </span>
+              </div>
+            ) : null}
+          </>
         ))}
       </div>
       {card.objectType === "vocabulary" ? (

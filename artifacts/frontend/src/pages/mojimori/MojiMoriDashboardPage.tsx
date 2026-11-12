@@ -403,6 +403,7 @@ export function MojiMoriDashboardPage() {
               {sheet ? (
                 <div
                   className={`level-sheet p-5 ${phase === "open" ? "is-open" : ""}`}
+                  data-type={sheet}
                 >
                   <div className="mb-3 flex items-center justify-between">
                     <button
