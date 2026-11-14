@@ -1413,6 +1413,7 @@ function LessonNote({
   return (
     <div className="mm-quiz__note">
       <h2>{t(field === "meaning" ? "mojimori.study.meaningNote" : "mojimori.study.readingNote")}</h2>
+      <div className="mb-[0.45rem]"></div>
       {editing ? (
         <>
           <textarea className="moji-field" rows={3} value={value} onChange={(event) => setValue(event.target.value)} />

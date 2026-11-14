@@ -4861,6 +4861,10 @@ html:has(.mm-quiz__tools) [data-slot="toast"] {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.mm-lesson__browse {
+  padding: 0.85rem;
+}
+
 .mm-lesson__done-wrap {
   position: fixed;
   inset: 0;
