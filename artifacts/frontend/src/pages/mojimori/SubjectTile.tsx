@@ -172,7 +172,7 @@ export function ComposeSubjectItem({
 
 export function LevelSubjectCard({
   subject,
-  caption = true,
+  caption = false,
   showBar = true,
   className,
   onOpen,
@@ -193,6 +193,11 @@ export function LevelSubjectCard({
       }`}
     >
       <ProgressSquare subject={subject} size="sm" showBar={showBar} />
+      {caption ? (
+        <span className="mt-2 flex flex-col items-center gap-0.5">
+          <TileCaption subject={subject} />
+        </span>
+      ) : null}
     </button>
   );
 }

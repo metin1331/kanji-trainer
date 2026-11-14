@@ -501,7 +501,22 @@ export function MojiMoriSubjectPage() {
           </Section>
         ) : null}
 
-        {data.objectType !== "kanji" && similar.length > 0 ? (
+        {data.objectType === "vocabulary" && similar.length > 0 ? (
+          <Section id="similar" title={t("mojimori.visuallySimilar")}>
+            <div className="flex flex-wrap gap-3">
+              {similar.map((subject) => (
+                <LevelSubjectCard
+                  key={subject.id}
+                  subject={subject}
+                  caption
+                  showBar={false}
+                />
+              ))}
+            </div>
+          </Section>
+        ) : null}
+
+        {data.objectType === "radical" && similar.length > 0 ? (
           <Section id="similar" title={t("mojimori.visuallySimilar")}>
             <ComposeSubjectGrid subjects={similar} />
           </Section>

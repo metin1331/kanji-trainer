@@ -1204,7 +1204,7 @@ function CompositionSlide({
           <h2>{t("mojimori.visuallySimilar")}</h2>
           <div className="flex flex-wrap gap-3">
             {similar.map((subject) => (
-              <LevelSubjectCard key={subject.id} subject={subject} showBar={false} onOpen={onOpen} />
+              <LevelSubjectCard key={subject.id} subject={subject} caption showBar={false} onOpen={onOpen} />
             ))}
           </div>
         </section>
@@ -1214,7 +1214,7 @@ function CompositionSlide({
           <h2>{t("mojimori.foundInVocabulary")}</h2>
           <div className="flex flex-wrap gap-3">
             {found.map((subject) => (
-              <LevelSubjectCard key={subject.id} subject={subject} showBar={false} onOpen={onOpen} />
+              <LevelSubjectCard key={subject.id} subject={subject} caption showBar={false} onOpen={onOpen} />
             ))}
           </div>
         </section>

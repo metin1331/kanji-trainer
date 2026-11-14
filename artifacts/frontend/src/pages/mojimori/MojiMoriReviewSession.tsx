@@ -66,7 +66,6 @@ import type { MojiMoriSubjectSummary } from "../../lib/mojiMori";
 import { MojiMoriLayout } from "./MojiMoriLayout";
 import { CompleteRouteProgress } from "./MojiRouteBar";
 import {
-  ComposeSubjectGrid,
   ComposeSubjectItem,
   LevelSubjectCard,
   StudyItem,
@@ -2512,7 +2511,17 @@ export function ReviewInfo({
           open={open.found}
           onToggle={() => toggle("found")}
         >
-          <ComposeSubjectGrid subjects={detail.related.amalgamations} onOpen={onOpen} />
+          <div className="flex flex-wrap gap-3">
+            {detail.related.amalgamations.map((subject) => (
+              <LevelSubjectCard
+                key={subject.id}
+                subject={subject}
+                caption
+                showBar={false}
+                onOpen={onOpen}
+              />
+            ))}
+          </div>
         </Fold>
       ) : null}
       {detail.objectType === "radical" &&
@@ -2535,7 +2544,17 @@ export function ReviewInfo({
           open={open.similar}
           onToggle={() => toggle("similar")}
         >
-          <ComposeSubjectGrid subjects={detail.related.visuallySimilar} onOpen={onOpen} />
+          <div className="flex flex-wrap gap-3">
+            {detail.related.visuallySimilar.map((subject) => (
+              <LevelSubjectCard
+                key={subject.id}
+                subject={subject}
+                caption
+                showBar={false}
+                onOpen={onOpen}
+              />
+            ))}
+          </div>
         </Fold>
       ) : null}
     </div>
