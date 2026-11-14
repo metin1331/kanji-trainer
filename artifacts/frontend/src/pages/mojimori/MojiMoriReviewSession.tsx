@@ -2524,7 +2524,7 @@ export function ReviewInfo({
         >
           <div className="mm-compose">
             {detail.related.amalgamations.map((subject) => (
-              <LevelSubjectCard key={subject.id} subject={subject} onOpen={onOpen} />
+              <LevelSubjectCard key={subject.id} subject={subject} showBar={false} onOpen={onOpen} />
             ))}
           </div>
         </Fold>

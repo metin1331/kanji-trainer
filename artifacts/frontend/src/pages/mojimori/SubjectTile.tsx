@@ -173,11 +173,13 @@ export function ComposeSubjectItem({
 export function LevelSubjectCard({
   subject,
   caption = true,
+  showBar = true,
   className,
   onOpen,
 }: {
   subject: MojiMoriSubjectSummary;
   caption?: boolean;
+  showBar?: boolean;
   className?: string;
   onOpen?: (subject: MojiMoriSubjectSummary) => void;
 }) {
@@ -190,7 +192,7 @@ export function LevelSubjectCard({
         className ? ` ${className}` : ""
       }`}
     >
-      <ProgressSquare subject={subject} size="sm" />
+      <ProgressSquare subject={subject} size="sm" showBar={showBar} />
     </button>
   );
 }
@@ -235,7 +237,7 @@ export function SeeAllGrid({
           onClick={() => navigate(mojiMoriSubjectHref(subject))}
           className="flex shrink-0"
         >
-          <ProgressSquare subject={subject} />
+          <ProgressSquare subject={subject} showBar />
         </button>
       ))}
     </div>

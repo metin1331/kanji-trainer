@@ -758,6 +758,7 @@ export function MojiMoriLessonSession({ ids }: { ids?: number[] }) {
                 <LevelSubjectCard
                   subject={studyCardToSummary(item)}
                   caption={false}
+                  showBar={false}
                   className={itemIndex === index ? "is-current" : undefined}
                   onOpen={() => openItem(itemIndex)}
                 />
@@ -1177,7 +1178,7 @@ function CompositionSlide({
           <div className="flex flex-wrap items-center gap-3">
             {parts.map((subject, index) => (
               <span key={subject.id} className="contents">
-                <LevelSubjectCard subject={subject} onOpen={onOpen} />
+                <LevelSubjectCard subject={subject} showBar={false} onOpen={onOpen} />
                 {parts.length > 1 && index !== parts.length - 1 ? (
                   <div className="mm-compose__plus">
                     <span>
@@ -1203,7 +1204,7 @@ function CompositionSlide({
           <h2>{t("mojimori.visuallySimilar")}</h2>
           <div className="flex flex-wrap gap-3">
             {similar.map((subject) => (
-              <LevelSubjectCard key={subject.id} subject={subject} onOpen={onOpen} />
+              <LevelSubjectCard key={subject.id} subject={subject} showBar={false} onOpen={onOpen} />
             ))}
           </div>
         </section>
@@ -1213,7 +1214,7 @@ function CompositionSlide({
           <h2>{t("mojimori.foundInVocabulary")}</h2>
           <div className="flex flex-wrap gap-3">
             {found.map((subject) => (
-              <LevelSubjectCard key={subject.id} subject={subject} onOpen={onOpen} />
+              <LevelSubjectCard key={subject.id} subject={subject} showBar={false} onOpen={onOpen} />
             ))}
           </div>
         </section>
