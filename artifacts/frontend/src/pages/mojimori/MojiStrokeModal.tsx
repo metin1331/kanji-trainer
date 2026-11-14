@@ -37,12 +37,19 @@ function orderedKanjiChars(str: string): string[] {
 }
 
 export function strokeKanjiSource(card: MojiMoriStudyCard): string | null {
-  if (card.characters) {
-    const ordered = orderedKanjiChars(card.characters);
+  return strokeSourceFromText(card.characters, card.wordKanji);
+}
+
+export function strokeSourceFromText(
+  characters: string | null | undefined,
+  wordKanji?: string[] | null,
+): string | null {
+  if (characters) {
+    const ordered = orderedKanjiChars(characters);
     if (ordered.length > 0) return ordered.join("");
   }
-  if (card.wordKanji?.length) {
-    const ordered = orderedKanjiChars(card.wordKanji.join(""));
+  if (wordKanji?.length) {
+    const ordered = orderedKanjiChars(wordKanji.join(""));
     if (ordered.length > 0) return ordered.join("");
   }
   return null;
@@ -415,26 +422,55 @@ export function StrokeGlyphTrigger({
   className?: string;
   children: ReactNode;
 }) {
+  return (
+    <StrokeSubjectTrigger
+      characters={card.characters}
+      wordKanji={card.wordKanji}
+      objectType={card.objectType}
+      className={className}
+    >
+      {children}
+    </StrokeSubjectTrigger>
+  );
+}
+
+export function StrokeSubjectTrigger({
+  characters,
+  wordKanji,
+  objectType,
+  className,
+  children,
+}: {
+  characters: string | null | undefined;
+  wordKanji?: string[] | null;
+  objectType: MojiMoriObjectType;
+  className?: string;
+  children: ReactNode;
+}) {
   const [open, setOpen] = useState(false);
-  const source = strokeKanjiSource(card);
-  const canOpen = Boolean(source);
+  const source = strokeSourceFromText(characters, wordKanji);
+  if (!source) {
+    if (!className) return <>{children}</>;
+    return (
+      <button type="button" className={`mm-stroke-glyph-trigger ${className}`} disabled>
+        {children}
+      </button>
+    );
+  }
 
   return (
     <>
       <button
         type="button"
         className={`mm-stroke-glyph-trigger${className ? ` ${className}` : ""}`}
-        disabled={!canOpen}
-        onClick={() => {
-          if (canOpen) setOpen(true);
-        }}
+        onClick={() => setOpen(true)}
       >
         {children}
       </button>
-      {open && source ? (
+      {open ? (
         <MojiStrokeModal
           kanji={source}
-          objectType={card.objectType}
+          objectType={objectType}
           onClose={() => setOpen(false)}
         />
       ) : null}

@@ -300,81 +300,7 @@
 .level-sheet__grid {
   display: flex;
   flex-wrap: wrap;
-  column-gap: 0.875rem;
-  row-gap: 0.25rem;
-}
-
-@media (max-width: 480px) {
-  .level-sheet .level-sheet__grid {
-    display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-    gap: 0.45rem 0.35rem;
-  }
-
-  .level-sheet .level-sheet__grid > button {
-    width: 100%;
-  }
-
-  .level-sheet .level-sheet__grid .study-progress {
-    width: 100%;
-  }
-
-  .level-sheet .level-sheet__grid .study-character {
-    width: 100%;
-    aspect-ratio: 1;
-    padding: 0.4rem;
-  }
-
-  .level-sheet .level-sheet__grid .study-character__characters-text {
-    font-size: 1.55rem;
-  }
-
-  .level-sheet .level-sheet__grid .study-progress__status {
-    font-size: 0.72rem;
-  }
-}
-
-@media (max-width: 340px) {
-  .level-sheet .level-sheet__grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-
-  .level-sheet[data-type="vocabulary"] .level-sheet__grid {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 480px) {
-  .level-sheet[data-type="vocabulary"] .level-sheet__grid {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-    justify-items: center;
-  }
-
-  .level-sheet[data-type="vocabulary"] .level-sheet__grid > button {
-    width: max-content;
-    max-width: 100%;
-    justify-self: center;
-  }
-
-  .level-sheet[data-type="vocabulary"] .level-sheet__grid .study-progress {
-    width: max-content;
-    max-width: 100%;
-  }
-
-  .level-sheet[data-type="vocabulary"] .level-sheet__grid .study-character {
-    width: auto;
-    min-width: 100%;
-    aspect-ratio: auto;
-    min-height: 2.75rem;
-    padding: 0.28rem 0.35rem;
-  }
-
-  .level-sheet[data-type="vocabulary"] .level-sheet__grid .study-character__characters-text,
-  .level-sheet[data-type="vocabulary"] .level-sheet__grid .leading-none {
-    white-space: nowrap;
-    font-size: clamp(0.7rem, 2.8vw, 1.15rem);
-    line-height: 1.1;
-  }
+  gap: 0.75rem;
 }
 
 .forecast-head {
@@ -574,6 +500,10 @@ button.forecast-row {
   font-size: 1.35rem;
   font-weight: 400;
   line-height: 1;
+}
+
+.moji-status--vocabulary .study-character__characters-text {
+  white-space: nowrap;
 }
 
 .moji-status--radical {
@@ -2603,6 +2533,11 @@ button.forecast-row {
   opacity: 0.92;
 }
 
+.mm-stroke-glyph-trigger.is-inline {
+  display: inline-flex;
+  width: auto;
+}
+
 .mm-stroke-modal__backdrop {
   position: fixed;
   inset: 0;
@@ -3729,8 +3664,16 @@ html:has(.mm-quiz__tools) [data-slot="toast"] {
   background: transparent;
 }
 
-.moji-mori.is-bare:has(.review-complete) .moji-route-bar {
-  display: none;
+@media (max-width: 719px) {
+  .moji-mori.is-bare:has(.review-complete) .moji-route-bar {
+    display: none;
+  }
+}
+
+@media (min-width: 720px) {
+  .review-complete__route {
+    display: none;
+  }
 }
 
 .review-complete {
@@ -4782,10 +4725,10 @@ html:has(.mm-quiz__tools) [data-slot="toast"] {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.75rem;
   margin: 0;
   border-top: 1px solid var(--color-line);
-  padding: 0.85rem 1rem 1rem;
+  padding: 1rem;
   list-style: none;
 }
 
@@ -4797,20 +4740,6 @@ html:has(.mm-quiz__tools) [data-slot="toast"] {
   background: transparent;
   padding: 0;
   cursor: pointer;
-}
-
-.mm-lesson__chip .study-character {
-  width: auto;
-  min-width: 2.55rem;
-  max-width: none;
-  height: 2.55rem;
-  padding: 0.15rem 0.45rem;
-}
-
-.mm-lesson__chip .study-character__characters-text,
-.mm-lesson__chip .leading-none {
-  font-size: 1rem;
-  white-space: nowrap;
 }
 
 .mm-lesson__quiz {
@@ -4893,9 +4822,34 @@ html:has(.mm-quiz__tools) [data-slot="toast"] {
   font-size: 0.85rem;
 }
 
+.mm-lesson__relations {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+}
+
+.level-subject-card.is-current {
+  box-shadow: 0 0 0 2px var(--color-ink);
+}
+
 @media (max-width: 640px) {
+  .mm-quiz-page .mm-lesson__card.mm-quiz {
+    flex: 1 1 auto;
+    height: auto;
+    min-height: 0;
+    max-height: none;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
   .mm-lesson .mm-quiz__meter {
-    position: static;
+    position: absolute;
+    z-index: 2;
+    top: env(safe-area-inset-top, 0px);
+    left: 0;
+    right: 0;
   }
 }
 

@@ -26,6 +26,7 @@ import {
 import NotFound from "../not-found";
 import { MojiMoriLayout } from "./MojiMoriLayout";
 import { MnemonicText } from "./MnemonicText";
+import { StrokeSubjectTrigger } from "./MojiStrokeModal";
 import {
   ComposeSubjectGrid,
   LevelSubjectCard,
@@ -280,7 +281,13 @@ export function MojiMoriSubjectPage() {
 
       <div className="glass-panel p-5">
         <div className="subject-hero">
-          <StudyItem subject={data} />
+          <StrokeSubjectTrigger
+            characters={data.characters}
+            objectType={data.objectType}
+            className="is-inline"
+          >
+            <StudyItem subject={data} showTrack={false} />
+          </StrokeSubjectTrigger>
           <div className="subject-hero__copy">
             <h1 className="subject-hero__title">{data.primaryMeaning}</h1>
           </div>

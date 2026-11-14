@@ -37,9 +37,14 @@ import { checkStudyCard } from "../../lib/mojiMoriGrade";
 import { audioTracks, pickVoice, type AudioTrack } from "./mojiVoice";
 import { toast } from "@/components/smoothui/toast";
 import { MnemonicText } from "./MnemonicText";
-import { SubjectCharacter } from "./SubjectCharacter";
-import { ComposeSubjectItem, visualMode } from "./SubjectTile";
-import { KanaPad, ReviewCompletePanel, ReviewInfo } from "./MojiMoriReviewSession";
+import { LevelSubjectCard } from "./SubjectTile";
+import {
+  KanaPad,
+  ReviewCompletePanel,
+  ReviewInfo,
+  studyCardToSummary,
+  useQuizStageChrome,
+} from "./MojiMoriReviewSession";
 import { KanjiReview, KanjiStrokeQuiz, WordReveal } from "./KanjiStrokeQuiz";
 import { StrokeGlyphTrigger } from "./MojiStrokeModal";
 import { beginPress, clearFinishedPress, isHolding, restorePresses, whenPressFinishes } from "./pressBounce";
@@ -92,7 +97,16 @@ function holdCaret(input: HTMLInputElement | null) {
 function slidesFor(card: MojiMoriStudyCard, detail: MojiMoriSubjectDetail | null): SlideId[] {
   const slides: SlideId[] = [];
   const components = detail?.related.components.length ?? 0;
-  if (card.objectType !== "radical" && components > 0) slides.push("composition");
+  const related =
+    (detail?.related.visuallySimilar.length ?? 0) +
+    (detail?.related.amalgamations.length ?? 0);
+  if (
+    card.objectType === "kanji"
+      ? components > 0 || related > 0
+      : card.objectType !== "radical" && components > 0
+  ) {
+    slides.push("composition");
+  }
   slides.push("meaning");
   if (card.prompts.includes("reading")) slides.push("reading");
   const sentences = detail?.contextSentences ?? card.contextSentences ?? [];
@@ -152,6 +166,12 @@ export function MojiMoriLessonSession({ ids }: { ids?: number[] }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const prefs = useMojiMoriStudySettings();
+  const stageCardId =
+    phase === "quiz" ? tasks[0]?.id ?? null : order?.[index]?.id ?? null;
+  useQuizStageChrome(
+    Boolean(order && order.length > 0 && stageCardId != null),
+    `${stageCardId ?? ""}:${phase}`,
+  );
   const heard = useRef("");
   useLayoutEffect(() => {
     restorePresses(methodsRef.current);
@@ -359,7 +379,12 @@ export function MojiMoriLessonSession({ ids }: { ids?: number[] }) {
     const subject = order?.find((item) => item.id === current?.id);
     if (!current || !subject) return;
     const raw = (word?.answer ?? draft).trim();
-    if (!raw) return;
+    if (!raw) {
+      setShaking(false);
+      requestAnimationFrame(() => setShaking(true));
+      holdCaret(inputRef.current);
+      return;
+    }
     const answer = current.prompt === "reading" ? romajiToKanaInput(raw) : raw;
     if (current.prompt === "reading" && readingAnswerIncomplete(answer)) {
       setDraft(answer);
@@ -600,7 +625,7 @@ export function MojiMoriLessonSession({ ids }: { ids?: number[] }) {
           />
         </div>
       ) : null}
-      <header className="mm-lesson__stage" data-kind={shown.objectType}>
+      <header className="mm-quiz__stage mm-lesson__stage" data-kind={shown.objectType}>
         <div className="mm-lesson__bar">
           <Link href="/mojimori" className="mm-quiz__home" title={t("mojimori.study.returnHome")} onClick={goHome}>
             <House size={18} />
@@ -730,14 +755,12 @@ export function MojiMoriLessonSession({ ids }: { ids?: number[] }) {
           <ul className="mm-lesson__queue">
             {order.map((item, itemIndex) => (
               <li key={item.id}>
-                <button
-                  type="button"
-                  className={`mm-lesson__chip${itemIndex === index ? " is-current" : ""}`}
-                  title={primaryReading(item) || primaryMeaning(item)}
-                  onClick={() => openItem(itemIndex)}
-                >
-                  <QueueGlyph card={item} />
-                </button>
+                <LevelSubjectCard
+                  subject={studyCardToSummary(item)}
+                  caption={false}
+                  className={itemIndex === index ? "is-current" : undefined}
+                  onOpen={() => openItem(itemIndex)}
+                />
               </li>
             ))}
             <li>
@@ -1123,21 +1146,6 @@ function kindLabel(type: string, t: (key: string) => string): string {
   return t("mojimori.study.quizVocabulary");
 }
 
-function QueueGlyph({ card }: { card: MojiMoriStudyCard }) {
-  const subject = {
-    characters: card.characters,
-    characterImages: card.characterImages,
-    primaryMeaning: primaryMeaning(card),
-  };
-  return (
-    <span className={`study-character moji-status moji-status--${card.objectType} moji-status--incomplete`}>
-      <span className="study-character__characters">
-        <SubjectCharacter subject={subject} className="leading-none" imageClassName="h-5 w-5 object-contain" />
-      </span>
-    </span>
-  );
-}
-
 function CompositionSlide({
   card,
   detail,
@@ -1159,61 +1167,58 @@ function CompositionSlide({
       : count === 1
         ? t("mojimori.study.radicalsOne")
         : t("mojimori.study.radicalsMany", { count });
+  const similar = detail.related.visuallySimilar;
+  const found = detail.related.amalgamations;
   return (
     <div className="mm-lesson__copy">
-      <p>{intro}</p>
-      <div className="mm-compose">
-        {parts.map((subject, index) => (
-          <>
-            {card.objectType === "kanji" ? (
-              <ComposeSubjectItem
-                key={subject.id}
-                subject={subject}
-                onOpen={onOpen}
-                reading={false}
-              />
-            ) : (
-              <PartTile key={subject.id} subject={subject} onOpen={onOpen} />
-            )}
-            {parts.length > 1 && index !== parts.length - 1 ? (
-              <div className="mm-compose__plus" key={`plus-${subject.id}`}>
-                <span>
-                  <Plus size={16} />
-                </span>
-              </div>
-            ) : null}
-          </>
-        ))}
-      </div>
-      {card.objectType === "vocabulary" ? (
+      {parts.length > 0 ? (
         <>
-          <p>{t("mojimori.study.relateMeanings")}</p>
-          <p>{t("mojimori.study.guessReading")}</p>
+          <p>{intro}</p>
+          <div className="flex flex-wrap items-center gap-3">
+            {parts.map((subject, index) => (
+              <span key={subject.id} className="contents">
+                <LevelSubjectCard subject={subject} onOpen={onOpen} />
+                {parts.length > 1 && index !== parts.length - 1 ? (
+                  <div className="mm-compose__plus">
+                    <span>
+                      <Plus size={16} />
+                    </span>
+                  </div>
+                ) : null}
+              </span>
+            ))}
+          </div>
+          {card.objectType === "vocabulary" ? (
+            <>
+              <p>{t("mojimori.study.relateMeanings")}</p>
+              <p>{t("mojimori.study.guessReading")}</p>
+            </>
+          ) : (
+            <p>{t("mojimori.study.radicalGuess")}</p>
+          )}
         </>
-      ) : (
-        <p>{t("mojimori.study.radicalGuess")}</p>
-      )}
+      ) : null}
+      {card.objectType === "kanji" && similar.length > 0 ? (
+        <section className="mm-lesson__relations">
+          <h2>{t("mojimori.visuallySimilar")}</h2>
+          <div className="flex flex-wrap gap-3">
+            {similar.map((subject) => (
+              <LevelSubjectCard key={subject.id} subject={subject} onOpen={onOpen} />
+            ))}
+          </div>
+        </section>
+      ) : null}
+      {card.objectType === "kanji" && found.length > 0 ? (
+        <section className="mm-lesson__relations">
+          <h2>{t("mojimori.foundInVocabulary")}</h2>
+          <div className="flex flex-wrap gap-3">
+            {found.map((subject) => (
+              <LevelSubjectCard key={subject.id} subject={subject} onOpen={onOpen} />
+            ))}
+          </div>
+        </section>
+      ) : null}
     </div>
-  );
-}
-
-function PartTile({
-  subject,
-  onOpen,
-}: {
-  subject: MojiMoriSubjectSummary;
-  onOpen: (subject: MojiMoriSubjectSummary) => void;
-}) {
-  const mode = visualMode(subject.progress?.status ?? "locked", subject.progress?.srsStage ?? 0);
-  return (
-    <button type="button" className="mm-lesson__part" title={subject.primaryReading} onClick={() => onOpen(subject)}>
-      <span className={`study-character moji-status moji-status--${subject.objectType} moji-status--${mode}`}>
-        <span className="study-character__characters">
-          <SubjectCharacter subject={subject} className="text-[1.7rem] leading-none" imageClassName="h-8 w-8 object-contain" />
-        </span>
-      </span>
-      <small>{subject.primaryMeaning}</small>
-    </button>
   );
 }
 

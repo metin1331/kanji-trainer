@@ -75,7 +75,7 @@ import { audioTracks, pickVoice, type AudioTrack } from "./mojiVoice";
 import { placeDrawingLast } from "./quizOrder";
 import { currentReviewBoot, releaseReviewBoot, retainReviewBoot } from "./reviewBoot";
 import { KanjiReview, KanjiStrokeQuiz, WordReveal } from "./KanjiStrokeQuiz";
-import { StrokeGlyphTrigger } from "./MojiStrokeModal";
+import { StrokeGlyphTrigger, StrokeSubjectTrigger } from "./MojiStrokeModal";
 import {
   nextReviewQueue,
   rememberLapse,
@@ -351,6 +351,45 @@ function Glyph({
   const src = pickCharacterImage(card.characterImages);
   if (src) return <img src={src} alt="" />;
   return <span>?</span>;
+}
+
+export function useQuizStageChrome(active: boolean, token: string) {
+  useEffect(() => {
+    if (!active) return;
+    const root = document.documentElement;
+    const body = document.body;
+    const apply = () => {
+      const current = document.querySelector<HTMLElement>(
+        ".mm-quiz__stage, .mm-lesson__stage",
+      );
+      if (!current) return;
+      const raw = getComputedStyle(current).backgroundColor;
+      const canvas = document.createElement("canvas").getContext("2d");
+      let color = raw;
+      if (canvas) {
+        canvas.fillStyle = "#010101";
+        canvas.fillStyle = raw;
+        if (canvas.fillStyle && canvas.fillStyle !== "#010101")
+          color = canvas.fillStyle;
+      }
+      document
+        .querySelectorAll('meta[name="theme-color"]')
+        .forEach((node) => node.remove());
+      const next = document.createElement("meta");
+      next.name = "theme-color";
+      next.content = color;
+      document.head.appendChild(next);
+      root.style.backgroundColor = color;
+      body.style.backgroundColor = color;
+    };
+    apply();
+    const observer = new MutationObserver(apply);
+    observer.observe(root, { attributes: true, attributeFilter: ["class"] });
+    return () => {
+      observer.disconnect();
+      applyColorScheme(getStoredColorScheme(), false);
+    };
+  }, [active, token]);
 }
 
 export function MojiMoriReviewSession({
@@ -776,41 +815,10 @@ export function MojiMoriReviewSession({
     };
   }, [card?.id, sheet, pending]);
 
-  useEffect(() => {
-    const stage = document.querySelector<HTMLElement>(".mm-quiz__stage");
-    if (!stage) return;
-    const root = document.documentElement;
-    const body = document.body;
-    const apply = () => {
-      const current = document.querySelector<HTMLElement>(".mm-quiz__stage");
-      if (!current) return;
-      const raw = getComputedStyle(current).backgroundColor;
-      const canvas = document.createElement("canvas").getContext("2d");
-      let color = raw;
-      if (canvas) {
-        canvas.fillStyle = "#010101";
-        canvas.fillStyle = raw;
-        if (canvas.fillStyle && canvas.fillStyle !== "#010101")
-          color = canvas.fillStyle;
-      }
-      document
-        .querySelectorAll('meta[name="theme-color"]')
-        .forEach((node) => node.remove());
-      const next = document.createElement("meta");
-      next.name = "theme-color";
-      next.content = color;
-      document.head.appendChild(next);
-      root.style.backgroundColor = color;
-      body.style.backgroundColor = color;
-    };
-    apply();
-    const observer = new MutationObserver(apply);
-    observer.observe(root, { attributes: true, attributeFilter: ["class"] });
-    return () => {
-      observer.disconnect();
-      applyColorScheme(getStoredColorScheme(), false);
-    };
-  }, [card?.id, card?.objectType]);
+  useQuizStageChrome(
+    Boolean(card),
+    `${card?.id ?? ""}:${card?.objectType ?? ""}`,
+  );
 
   useLayoutEffect(() => {
     if (sheet !== "info") return;
@@ -1076,7 +1084,11 @@ export function MojiMoriReviewSession({
       return;
     }
     const raw = (word?.answer ?? draft).trim();
-    if (!raw) return;
+    if (!raw) {
+      pulseShake();
+      holdCaret(inputRef.current);
+      return;
+    }
     const submitted =
       current.prompt === "reading" ? romajiToKanaInput(raw) : raw;
     if (current.prompt === "reading" && readingAnswerIncomplete(submitted)) {
@@ -2310,7 +2322,13 @@ export function ReviewInfo({
     <div className="mm-quiz__info">
       {showHeadline ? (
         <div className="mm-quiz__info-head subject-hero">
-          <StudyItem subject={detail} />
+          <StrokeSubjectTrigger
+            characters={detail.characters}
+            objectType={detail.objectType}
+            className="is-inline"
+          >
+            <StudyItem subject={detail} />
+          </StrokeSubjectTrigger>
           <div className="subject-hero__copy">
             <p className="subject-hero__title">{detail.primaryMeaning}</p>
             {detail.objectType !== "radical" && detail.primaryReading ? (

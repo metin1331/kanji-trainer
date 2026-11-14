@@ -113,7 +113,6 @@ export function SubjectTile({
       className="flex flex-col items-center gap-1 rounded-md px-1 py-1 text-center"
     >
       <ProgressSquare subject={subject} size={compact ? "sm" : "md"} />
-      {!compact ? <TileCaption subject={subject} /> : null}
     </button>
   );
 }
@@ -174,10 +173,12 @@ export function ComposeSubjectItem({
 export function LevelSubjectCard({
   subject,
   caption = true,
+  className,
   onOpen,
 }: {
   subject: MojiMoriSubjectSummary;
   caption?: boolean;
+  className?: string;
   onOpen?: (subject: MojiMoriSubjectSummary) => void;
 }) {
   const [, navigate] = useLocation();
@@ -185,14 +186,11 @@ export function LevelSubjectCard({
     <button
       type="button"
       onClick={() => (onOpen ? onOpen(subject) : navigate(mojiMoriSubjectHref(subject)))}
-      className="level-subject-card flex w-max max-w-full flex-col items-center px-2 py-3 text-center"
+      className={`flex w-max max-w-full flex-col items-center ${
+        className ? ` ${className}` : ""
+      }`}
     >
       <ProgressSquare subject={subject} size="sm" />
-      {caption ? (
-        <span className="mt-2 flex flex-col items-center gap-0.5">
-          <TileCaption subject={subject} />
-        </span>
-      ) : null}
     </button>
   );
 }
@@ -222,8 +220,14 @@ export function SeeAllGrid({
         .sort((left, right) => left.rank - right.rank || left.index - right.index)
         .map((item) => item.subject)
     : subjects;
-  return (
-    <div className={grouped ? "level-sheet__grid" : "flex flex-wrap gap-x-3.5 gap-y-1"}>
+  return grouped ? (
+    <div className="level-sheet__grid">
+      {ordered.map((subject) => (
+        <LevelSubjectCard key={subject.id} subject={subject} />
+      ))}
+    </div>
+  ) : (
+    <div className="flex flex-wrap gap-x-3.5 gap-y-1">
       {ordered.map((subject) => (
         <button
           key={subject.id}
@@ -231,7 +235,7 @@ export function SeeAllGrid({
           onClick={() => navigate(mojiMoriSubjectHref(subject))}
           className="flex shrink-0"
         >
-          <ProgressSquare subject={subject} showBar />
+          <ProgressSquare subject={subject} />
         </button>
       ))}
     </div>
