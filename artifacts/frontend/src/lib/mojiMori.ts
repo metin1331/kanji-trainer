@@ -174,6 +174,8 @@ export type MojiMoriStudyCard = {
   wordReading?: string;
   wordMeaning?: string;
   gradeKey?: MojiMoriGradeKey;
+  /** Outline card: meanings are gradable, peer data may still be loading. */
+  partial?: boolean;
   meanings?: MojiMoriMeaning[];
   readings?: MojiMoriReading[];
   meaningMnemonic?: string;

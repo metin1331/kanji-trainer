@@ -2608,40 +2608,26 @@ button.forecast-row {
   inset: 0;
   z-index: 999;
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: center;
+  padding:
+    max(1rem, env(safe-area-inset-top, 0px))
+    1rem
+    max(1rem, env(safe-area-inset-bottom, 0px));
   background: rgba(0, 0, 0, 0.4);
   color: var(--color-text);
 }
 
-@media (min-width: 640px) {
-  .mm-stroke-modal__backdrop {
-    align-items: center;
-    padding: 1rem;
-  }
-}
-
 .mm-stroke-modal__panel {
-  width: 100%;
-  max-width: 420px;
-  max-height: 70vh;
+  width: min(20.5rem, calc(100vw - 2rem));
+  max-height: min(32rem, calc(100dvh - 2rem));
   overflow-x: hidden;
   overflow-y: auto;
-  border-radius: 16px 16px 0 0;
+  border-radius: 16px;
   background: var(--color-menu-bg);
   box-shadow:
-    0 -12px 40px rgba(0, 0, 0, 0.22);
-}
-
-@media (min-width: 640px) {
-  .mm-stroke-modal__panel {
-    width: min(20.5rem, calc(100vw - 2rem));
-    max-height: min(32rem, calc(100dvh - 2rem));
-    border-radius: 16px;
-    box-shadow:
-      0 12px 32px var(--glass-shadow-primary),
-      0 2px 8px var(--glass-shadow-accent);
-  }
+    0 12px 32px var(--glass-shadow-primary),
+    0 2px 8px var(--glass-shadow-accent);
 }
 
 .mm-stroke-modal__head {

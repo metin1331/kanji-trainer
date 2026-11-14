@@ -770,21 +770,7 @@ function reviewOutline(
   lookup: Awaited<ReturnType<typeof componentLookup>>,
 ) {
   const wordKanji = compositionKanji(row.componentSubjectIds ?? [], (id) => lookup.get(id));
-  const prompts = promptsFor(row.objectType);
-  const withWord = row.objectType === "vocabulary" && wordKanji.length > 0;
-  return {
-    id: row.id,
-    objectType: row.objectType,
-    level: row.level,
-    characters: row.characters,
-    characterImages: row.characterImages,
-    pronunciationAudios: row.pronunciationAudios ?? [],
-    srsStage: row.srsStage,
-    prompts: withWord ? [...prompts, "word" as const] : prompts,
-    wordKanji: withWord ? wordKanji : [],
-    wordReading: withWord ? primaryReading(row.readings ?? []) : "",
-    wordMeaning: withWord ? primaryMeaning(row.meanings ?? []) : "",
-  };
+  return { ...quizCard(row, wordKanji), partial: true as const };
 }
 
 /** Full quiz payload for the next cards in an already ordered review. */

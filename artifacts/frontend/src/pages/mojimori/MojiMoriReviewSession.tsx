@@ -596,9 +596,11 @@ export function MojiMoriReviewSession({
       if (!needed.includes(task.subjectId)) needed.push(task.subjectId);
       if (needed.length >= 2) break;
     }
-    const missing = needed.filter(
-      (id) => !byId.get(id)?.gradeKey && !hydrating.current.has(id),
-    );
+    const missing = needed.filter((id) => {
+      const loaded = byId.get(id);
+      if (hydrating.current.has(id)) return false;
+      return !loaded?.gradeKey || loaded.partial === true;
+    });
     if (missing.length === 0) return;
     for (const id of missing) hydrating.current.add(id);
     void queryClient
@@ -1068,6 +1070,7 @@ export function MojiMoriReviewSession({
     reveal?: boolean;
   }) {
     if (!current || !card) return;
+    if (!card.gradeKey) return;
     if (pending) {
       advance();
       return;
@@ -1369,14 +1372,14 @@ export function MojiMoriReviewSession({
     const headNeedsCard =
       source === "review" && Boolean(current) && !card?.gradeKey;
     if (
-      !boot &&
-      (feed.isLoading ||
-        !settingsReady ||
-        !ready ||
-        reviewResumePending ||
-        headNeedsCard)
+      feed.isLoading ||
+      !settingsReady ||
+      !ready ||
+      reviewResumePending ||
+      (headNeedsCard && !boot)
     )
       return <MojiMoriLoading />;
+    if (headNeedsCard) return null;
     if (!card || !current) {
       if (source === "review" && total > 0) {
         return (
