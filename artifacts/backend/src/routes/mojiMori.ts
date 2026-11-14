@@ -16,7 +16,7 @@ import {
   progressView,
   type MojiMoriProgressView,
 } from "../lib/mojiMoriProgress";
-import { studySnapshot, lessonPicker, lessonQueue, reviewQueue, reviewCards, extraQueue, gradeStudyItem, gradeStudyBatch, acceptReviewPrompt, readReviewResume, saveReviewCheckpoint, deleteReviewCheckpoint, dropCheckpointTask, checkStudyAnswer, checkWordAnswer, updateStudySettings, studySettings, saveSubjectNotes, unburnSubject, subjectAnswerStats, type ExtraMode, type StudyKind } from "../lib/mojiMoriStudy";
+import { studySnapshot, lessonPicker, lessonQueue, reviewQueue, reviewCards, extraQueue, customQueue, parseCustomStudyConfig, gradeStudyItem, gradeStudyBatch, acceptReviewPrompt, readReviewResume, saveReviewCheckpoint, deleteReviewCheckpoint, dropCheckpointTask, checkStudyAnswer, checkWordAnswer, updateStudySettings, studySettings, saveSubjectNotes, unburnSubject, subjectAnswerStats, type ExtraMode, type StudyKind } from "../lib/mojiMoriStudy";
 import { isReviewPrompt } from "../lib/mojiMoriReviewProgress";
 import { COMPLETED_STAGE } from "../lib/mojiMoriUnlock";
 
@@ -406,6 +406,19 @@ router.get("/mojimori/study/extra", async (req, res, next) => {
       return;
     }
     res.json(await extraQueue(getUserId(req), mode satisfies ExtraMode));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/mojimori/study/extra/custom", async (req, res, next) => {
+  try {
+    const config = parseCustomStudyConfig(req.body);
+    if (!config) {
+      res.status(400).json({ error: "Invalid custom study" });
+      return;
+    }
+    res.json(await customQueue(getUserId(req), config));
   } catch (err) {
     next(err);
   }

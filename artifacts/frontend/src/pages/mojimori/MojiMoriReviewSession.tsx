@@ -31,6 +31,7 @@ import { useLocation } from "wouter";
 import { toast } from "@/components/smoothui/toast";
 import { MojiMoriLoading } from "./MojiMoriLoading";
 import {
+  useMojiMoriCustom,
   useMojiMoriExtra,
   useMojiMoriNotes,
   useMojiMoriReviews,
@@ -394,15 +395,19 @@ export function useQuizStageChrome(active: boolean, token: string) {
 export function MojiMoriReviewSession({
   source = "review",
   extraMode = "recent-lessons",
+  onContinue,
 }: {
   source?: "review" | "extra";
   extraMode?: string;
+  onContinue?: () => void;
 } = {}) {
   const { t } = useTranslation();
   const [, setLocation] = useLocation();
   const reviews = useMojiMoriReviews(source === "review");
-  const extra = useMojiMoriExtra(extraMode, source === "extra");
-  const feed = source === "extra" ? extra : reviews;
+  const customMode = source === "extra" && extraMode === "custom";
+  const extra = useMojiMoriExtra(extraMode, source === "extra" && !customMode);
+  const custom = useMojiMoriCustom(customMode);
+  const feed = source === "extra" ? (customMode ? custom : extra) : reviews;
   const studyFlush = useStudyFlush(source === "extra" ? "extra" : "review");
   const [boot] = useState(() => {
     if (source !== "review") return null;
@@ -530,7 +535,7 @@ export function MojiMoriReviewSession({
       );
       if (source !== "review") {
         setCards(items);
-        setQueue(placeDrawingLast(shuffle(tasks), drawingLast));
+        setQueue(extraMode === "custom" ? tasks : placeDrawingLast(shuffle(tasks), drawingLast));
         return;
       }
       const byCard = new Map(items.map((item) => [item.id, item]));
@@ -620,6 +625,7 @@ export function MojiMoriReviewSession({
     feed.isLoading,
     feed.isFetching,
     source,
+    extraMode,
   ]);
 
   const byId = useMemo(
@@ -1146,13 +1152,13 @@ export function MojiMoriReviewSession({
         advance("miss");
         return;
       }
-      toast(
-        current.prompt === "word"
-          ? t("mojimori.study.helpWord")
-          : current.prompt === "reading"
-            ? t("mojimori.study.helpReading")
-            : t("mojimori.study.helpMeaning"),
-      );
+      if (current.prompt !== "meaning") {
+        toast(
+          current.prompt === "word"
+            ? t("mojimori.study.helpWord")
+            : t("mojimori.study.helpReading"),
+        );
+      }
       setMissText(submitted);
       setDraft(submitted);
       setMissTint(true);
@@ -1195,13 +1201,13 @@ export function MojiMoriReviewSession({
     setRecords(recordsRef.current);
     setRecent((list) => [card.id, ...list.filter((id) => id !== card.id)]);
     if (!checked.correct) {
-      toast(
-        current.prompt === "word"
-          ? t("mojimori.study.helpWord")
-          : current.prompt === "reading"
-            ? t("mojimori.study.helpReading")
-            : t("mojimori.study.helpMeaning"),
-      );
+      if (current.prompt !== "meaning") {
+        toast(
+          current.prompt === "word"
+            ? t("mojimori.study.helpWord")
+            : t("mojimori.study.helpReading"),
+        );
+      }
       setMissText(submitted);
       setMissTint(true);
       setAnswerLocked(true);
@@ -1272,6 +1278,12 @@ export function MojiMoriReviewSession({
       },
       () => toast(t("mojimori.study.saveFailed")),
     );
+  }
+
+  function continueSession() {
+    if (!onContinue) return;
+    const flush = source === "review" ? flushReviewOutbox() : studyFlush.flush();
+    void flush.finally(() => onContinue());
   }
 
   function finishHome() {
@@ -1376,7 +1388,7 @@ export function MojiMoriReviewSession({
       })),
     );
     setCards(items);
-    setQueue(placeDrawingLast(shuffle(tasks), drawingLast));
+    setQueue(extraMode === "custom" ? tasks : placeDrawingLast(shuffle(tasks), drawingLast));
   }
 
   const page = (() => {
@@ -1401,6 +1413,7 @@ export function MojiMoriReviewSession({
             correct={correct}
             percent={percent}
             onHome={finishHome}
+            onContinue={onContinue ? continueSession : undefined}
             title={t("mojimori.study.reviewsDone")}
           />
         );
@@ -1409,7 +1422,7 @@ export function MojiMoriReviewSession({
         <section className="glass-panel mm-quiz__done">
           <h1>
             {total === 0
-              ? t("mojimori.study.empty")
+              ? t(extraMode === "custom" ? "mojimori.study.customEmpty" : "mojimori.study.empty")
               : t(
                   source === "extra"
                     ? "mojimori.study.extraDone"
@@ -1888,7 +1901,7 @@ export function MojiMoriReviewSession({
               ? t("mojimori.study.helpWord")
               : current.prompt === "reading"
                 ? t("mojimori.study.helpReading")
-                : t("mojimori.study.helpMeaning")}
+                : t("mojimori.study.incorrect")}
           </p>
         ) : null}
         {sheet !== "none" ? (
@@ -2006,6 +2019,7 @@ export function ReviewCompletePanel({
   correct,
   percent,
   onHome,
+  onContinue,
   title,
 }: {
   cards: MojiMoriStudyCard[];
@@ -2014,6 +2028,7 @@ export function ReviewCompletePanel({
   correct: number;
   percent: number;
   onHome: () => void;
+  onContinue?: () => void;
   title: string;
 }) {
   const { t } = useTranslation();
@@ -2109,9 +2124,16 @@ export function ReviewCompletePanel({
           />
         </div>
         <div className="review-complete__actions">
-          <button type="button" className="moji-btn" onClick={openAnswers}>
-            {t("mojimori.study.answers")}
-          </button>
+          <div className="review-complete__pair">
+            <button type="button" className="moji-btn" onClick={openAnswers}>
+              {t("mojimori.study.answers")}
+            </button>
+            {onContinue ? (
+              <button type="button" className="moji-btn-primary" onClick={onContinue}>
+                {t("common.continue")}
+              </button>
+            ) : null}
+          </div>
           <button type="button" className="moji-btn-primary" onClick={onHome}>
             {t("mojimori.study.returnHome")}
           </button>

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "../lib/apiOrigin";
+import { readCustomStudyConfig } from "../lib/customStudy";
 import type {
   MojiMoriDashboard,
   MojiMoriLevelCount,
@@ -265,6 +266,25 @@ export function mojiMoriExtraQuery(mode: string) {
       return parseJson<{ items: import("../lib/mojiMori").MojiMoriStudyCard[] }>(res);
     },
   };
+}
+
+export function useMojiMoriCustom(enabled = true) {
+  const config = enabled ? readCustomStudyConfig() : null;
+  return useQuery({
+    queryKey: ["mojimori", "extra", "custom", config] as const,
+    queryFn: async () => {
+      if (!config || config.types.length === 0 || config.modes.length === 0) {
+        return { items: [] as import("../lib/mojiMori").MojiMoriStudyCard[] };
+      }
+      const res = await apiFetch("/api/mojimori/study/extra/custom", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(config),
+      });
+      return parseJson<{ items: import("../lib/mojiMori").MojiMoriStudyCard[] }>(res);
+    },
+    enabled,
+  });
 }
 
 export function useMojiMoriExtra(mode: string, enabled = true) {

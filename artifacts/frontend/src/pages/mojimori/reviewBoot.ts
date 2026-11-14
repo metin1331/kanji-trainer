@@ -59,6 +59,14 @@ export function releaseReviewBoot() {
   }, 50);
 }
 
+export function clearReviewBoot() {
+  boot = null;
+  if (dropTimer != null) {
+    window.clearTimeout(dropTimer);
+    dropTimer = null;
+  }
+}
+
 function shuffle<T>(items: T[]): T[] {
   const copy = [...items];
   for (let i = copy.length - 1; i > 0; i -= 1) {

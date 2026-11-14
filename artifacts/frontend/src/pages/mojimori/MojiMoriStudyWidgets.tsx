@@ -15,6 +15,7 @@ import type {
 } from "../../lib/mojiMori";
 import { TodaysLessonsWidget, TypeMix } from "./TodaysLessonsWidget";
 import { LevelSubjectCard } from "./SubjectTile";
+import { CustomStudyModal } from "./CustomStudyModal";
 
 function heatLevel(count: number) {
   if (count <= 0) return 0;
@@ -31,8 +32,10 @@ export function MojiMoriStudyWidgets({
 }) {
   const { t } = useTranslation();
   const [lockedDate, setLockedDate] = useState<string | null>(null);
+  const [customOpen, setCustomOpen] = useState(false);
 
   return (
+    <>
     <div className="space-y-5">
       <section className="grid gap-3 sm:grid-cols-2">
         <TodaysLessonsWidget lessons={study.lessons} />
@@ -82,6 +85,9 @@ export function MojiMoriStudyWidgets({
           <Link href="/mojimori/extra?mode=cooked" className="moji-btn">
             {t("mojimori.study.cookedItems", { count: study.extra.cooked })}
           </Link>
+          <button type="button" className="moji-btn" onClick={() => setCustomOpen(true)}>
+            {t("mojimori.study.customTitle")}
+          </button>
         </div>
         {study.mistakes.length > 0 ? (
           <div className="mt-4">
@@ -158,6 +164,8 @@ export function MojiMoriStudyWidgets({
         </p>
       </section>
     </div>
+    {customOpen ? <CustomStudyModal onClose={() => setCustomOpen(false)} /> : null}
+    </>
   );
 }
 

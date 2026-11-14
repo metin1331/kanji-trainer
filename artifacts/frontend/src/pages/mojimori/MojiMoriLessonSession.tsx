@@ -131,7 +131,13 @@ function Glyph({ card }: { card: MojiMoriStudyCard }) {
   return <span>?</span>;
 }
 
-export function MojiMoriLessonSession({ ids }: { ids?: number[] }) {
+export function MojiMoriLessonSession({
+  ids,
+  onContinue,
+}: {
+  ids?: number[];
+  onContinue?: () => void;
+}) {
   const { t } = useTranslation();
   const [, setLocation] = useLocation();
   const lessons = useMojiMoriLessons(ids);
@@ -465,13 +471,13 @@ export function MojiMoriLessonSession({ ids }: { ids?: number[] }) {
           [current.prompt]: { answer, correct: false },
         },
       };
-      toast(
-        current.prompt === "word"
-          ? t("mojimori.study.helpWord")
-          : current.prompt === "reading"
-            ? t("mojimori.study.helpReading")
-            : t("mojimori.study.helpMeaning"),
-      );
+      if (current.prompt !== "meaning") {
+        toast(
+          current.prompt === "word"
+            ? t("mojimori.study.helpWord")
+            : t("mojimori.study.helpReading"),
+        );
+      }
       setMissText(answer);
       setDraft(answer);
       setMissTint(true);
@@ -508,6 +514,11 @@ export function MojiMoriLessonSession({ ids }: { ids?: number[] }) {
   function finishLesson() {
     void studyFlush.flush().catch(() => toast(t("mojimori.study.saveFailed")));
     setLocation("/mojimori");
+  }
+
+  function continueLesson() {
+    if (!onContinue) return;
+    void studyFlush.flush().finally(() => onContinue());
   }
 
   const actions = useRef({
@@ -599,6 +610,7 @@ export function MojiMoriLessonSession({ ids }: { ids?: number[] }) {
           correct={stats.correct}
           percent={stats.percent}
           onHome={finishLesson}
+          onContinue={onContinue ? continueLesson : undefined}
           title={t("mojimori.study.lessonsDone")}
         />
       </div>

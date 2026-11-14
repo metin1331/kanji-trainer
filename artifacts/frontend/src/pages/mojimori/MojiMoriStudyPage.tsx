@@ -1,19 +1,46 @@
-import { useSearch } from "wouter";
+import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useLocation, useSearch } from "wouter";
 import { MojiMoriLayout } from "./MojiMoriLayout";
 import { MojiMoriLessonSession } from "./MojiMoriLessonSession";
 import { MojiMoriReviewSession } from "./MojiMoriReviewSession";
+import { clearReviewBoot } from "./reviewBoot";
 
 export function MojiMoriLessonPage() {
   const ids = lessonIdsFromSearch(useSearch());
+  const [, setLocation] = useLocation();
+  const queryClient = useQueryClient();
+  const [run, setRun] = useState(0);
   return (
     <MojiMoriLayout showHeader={false}>
-      <MojiMoriLessonSession ids={ids} />
+      <MojiMoriLessonSession
+        key={run}
+        ids={ids}
+        onContinue={() => {
+          if (ids?.length) setLocation("/mojimori/lessons");
+          void queryClient
+            .invalidateQueries({ queryKey: ["mojimori", "lessons"] })
+            .finally(() => setRun((value) => value + 1));
+        }}
+      />
     </MojiMoriLayout>
   );
 }
 
 export function MojiMoriReviewPage() {
-  return <MojiMoriReviewSession />;
+  const queryClient = useQueryClient();
+  const [run, setRun] = useState(0);
+  return (
+    <MojiMoriReviewSession
+      key={run}
+      onContinue={() => {
+        clearReviewBoot();
+        void queryClient
+          .invalidateQueries({ queryKey: ["mojimori", "reviews"] })
+          .finally(() => setRun((value) => value + 1));
+      }}
+    />
+  );
 }
 
 export function MojiMoriExtraPage() {

@@ -828,6 +828,297 @@ export async function extraQueue(userId: number, mode: ExtraMode) {
   return { items: await quizCards(rows) };
 }
 
+const CUSTOM_TYPES = ["radical", "kanji", "vocabulary"] as const;
+const CUSTOM_MODES = ["meaning", "reading", "drawing"] as const;
+const CUSTOM_SORTS = [
+  "review-oldest",
+  "review-newest",
+  "due-soonest",
+  "due-latest",
+  "random",
+  "accuracy-lowest",
+  "accuracy-highest",
+  "unlocked-newest",
+  "level-asc",
+  "level-desc",
+] as const;
+
+export type CustomStudyConfig = {
+  types: Array<(typeof CUSTOM_TYPES)[number]>;
+  modes: Array<(typeof CUSTOM_MODES)[number]>;
+  stages: number[];
+  levelMin: number | null;
+  levelMax: number | null;
+  accuracyMin: number | null;
+  accuracyMax: number | null;
+  reviewMin: number | null;
+  reviewMax: number | null;
+  unlocked: boolean;
+  neverReviewed: boolean;
+  sort: (typeof CUSTOM_SORTS)[number];
+  weakOnly: boolean;
+  weakThreshold: number;
+  dueOnly: boolean;
+  excludeRecent: boolean;
+  limit: number | null;
+};
+
+function optionalBound(value: unknown, min: number, max: number): number | null | undefined {
+  if (value == null || value === "") return null;
+  const number = Number(value);
+  if (!Number.isInteger(number) || number < min || number > max) return undefined;
+  return number;
+}
+
+export function parseCustomStudyConfig(body: unknown): CustomStudyConfig | null {
+  if (!body || typeof body !== "object") return null;
+  const raw = body as Record<string, unknown>;
+  const types = Array.isArray(raw.types)
+    ? [...new Set(raw.types.filter((item): item is (typeof CUSTOM_TYPES)[number] =>
+        CUSTOM_TYPES.includes(item as (typeof CUSTOM_TYPES)[number]),
+      ))]
+    : [];
+  const modes = Array.isArray(raw.modes)
+    ? [...new Set(raw.modes.filter((item): item is (typeof CUSTOM_MODES)[number] =>
+        CUSTOM_MODES.includes(item as (typeof CUSTOM_MODES)[number]),
+      ))]
+    : [];
+  if (types.length === 0 || modes.length === 0) return null;
+  const stages = Array.isArray(raw.stages)
+    ? [...new Set(raw.stages.map(Number).filter((stage) => Number.isInteger(stage) && stage >= 1 && stage <= COMPLETED_STAGE))]
+    : [];
+  const levelMin = optionalBound(raw.levelMin, 1, 60);
+  const levelMax = optionalBound(raw.levelMax, 1, 60);
+  const accuracyMin = optionalBound(raw.accuracyMin, 0, 100);
+  const accuracyMax = optionalBound(raw.accuracyMax, 0, 100);
+  const reviewMin = optionalBound(raw.reviewMin, 0, 100000);
+  const reviewMax = optionalBound(raw.reviewMax, 0, 100000);
+  const weakThreshold = optionalBound(raw.weakThreshold, 1, 100);
+  const limit = raw.limit == null ? null : optionalBound(raw.limit, 1, 500);
+  const sort = CUSTOM_SORTS.includes(raw.sort as (typeof CUSTOM_SORTS)[number])
+    ? (raw.sort as (typeof CUSTOM_SORTS)[number])
+    : null;
+  if (
+    levelMin === undefined ||
+    levelMax === undefined ||
+    accuracyMin === undefined ||
+    accuracyMax === undefined ||
+    reviewMin === undefined ||
+    reviewMax === undefined ||
+    weakThreshold === undefined ||
+    limit === undefined ||
+    !sort ||
+    raw.unlocked !== true
+  ) {
+    return null;
+  }
+  return {
+    types,
+    modes,
+    stages,
+    levelMin,
+    levelMax,
+    accuracyMin,
+    accuracyMax,
+    reviewMin,
+    reviewMax,
+    unlocked: true,
+    neverReviewed: raw.neverReviewed === true,
+    sort,
+    weakOnly: raw.weakOnly === true,
+    weakThreshold: weakThreshold ?? 70,
+    dueOnly: raw.dueOnly === true,
+    excludeRecent: raw.excludeRecent === true,
+    limit,
+  };
+}
+
+function drawableKanji(characters: string | null): string[] {
+  if (!characters) return [];
+  return [...characters].filter((char) => {
+    const code = char.codePointAt(0) ?? 0;
+    return (code >= 0x4e00 && code <= 0x9fff) || (code >= 0x3400 && code <= 0x4dbf);
+  });
+}
+
+function nullsLast(left: number | null, right: number | null, direction: 1 | -1): number {
+  if (left == null && right == null) return 0;
+  if (left == null) return 1;
+  if (right == null) return -1;
+  return (left - right) * direction;
+}
+
+export async function customQueue(userId: number, config: CustomStudyConfig) {
+  const rows = await db
+    .select({
+      id: mojiMoriSubjectsTable.id,
+      objectType: mojiMoriSubjectsTable.objectType,
+      level: mojiMoriSubjectsTable.level,
+      characters: mojiMoriSubjectsTable.characters,
+      characterImages: mojiMoriSubjectsTable.characterImages,
+      pronunciationAudios: mojiMoriSubjectsTable.pronunciationAudios,
+      componentSubjectIds: mojiMoriSubjectsTable.componentSubjectIds,
+      meanings: mojiMoriSubjectsTable.meanings,
+      readings: mojiMoriSubjectsTable.readings,
+      auxiliaryMeanings: mojiMoriSubjectsTable.auxiliaryMeanings,
+      srsStage: mojiMoriProgressTable.srsStage,
+      unlockedAt: mojiMoriProgressTable.unlockedAt,
+      startedAt: mojiMoriProgressTable.startedAt,
+      availableAt: mojiMoriProgressTable.availableAt,
+      incorrectCount: mojiMoriProgressTable.incorrectCount,
+      meaningCorrect: mojiMoriProgressTable.meaningCorrect,
+      meaningIncorrect: mojiMoriProgressTable.meaningIncorrect,
+      readingCorrect: mojiMoriProgressTable.readingCorrect,
+      readingIncorrect: mojiMoriProgressTable.readingIncorrect,
+    })
+    .from(mojiMoriSubjectsTable)
+    .innerJoin(
+      mojiMoriProgressTable,
+      and(
+        eq(mojiMoriProgressTable.subjectId, mojiMoriSubjectsTable.id),
+        eq(mojiMoriProgressTable.userId, userId),
+      ),
+    )
+    .where(
+      and(
+        inArray(mojiMoriSubjectsTable.objectType, config.types),
+        or(
+          sql`${mojiMoriProgressTable.unlockedAt} is not null`,
+          sql`${mojiMoriProgressTable.startedAt} is not null`,
+          gte(mojiMoriProgressTable.srsStage, 1),
+        ),
+      ),
+    );
+  const stats = await db
+    .select({
+      subjectId: mojiMoriReviewsTable.subjectId,
+      lastReview: sql<Date | null>`max(${mojiMoriReviewsTable.createdAt})`,
+      reviewCount: sql<number>`count(*)::int`,
+    })
+    .from(mojiMoriReviewsTable)
+    .where(
+      and(
+        eq(mojiMoriReviewsTable.userId, userId),
+        inArray(mojiMoriReviewsTable.kind, ["review", "extra"]),
+      ),
+    )
+    .groupBy(mojiMoriReviewsTable.subjectId);
+  const bySubject = new Map(stats.map((row) => [row.subjectId, row]));
+  const now = Date.now();
+  const dayAgo = now - 24 * 60 * 60 * 1000;
+  const eligible = rows.flatMap((row) => {
+    const stat = bySubject.get(row.id);
+    const reviewCount = Number(stat?.reviewCount ?? 0);
+    const attempts =
+      (row.meaningCorrect ?? 0) +
+      (row.meaningIncorrect ?? 0) +
+      (row.readingCorrect ?? 0) +
+      (row.readingIncorrect ?? 0);
+    const accuracy = attempts > 0
+      ? Math.round((100 * ((row.meaningCorrect ?? 0) + (row.readingCorrect ?? 0))) / attempts)
+      : null;
+    const lastReview = stat?.lastReview ? new Date(stat.lastReview).getTime() : null;
+    const availableAt = row.availableAt ? new Date(row.availableAt).getTime() : null;
+    const unlockedAt = row.unlockedAt ? new Date(row.unlockedAt).getTime() : null;
+    const stage = row.srsStage ?? 0;
+    const canMean = config.modes.includes("meaning");
+    const canRead = config.modes.includes("reading") && row.objectType !== "radical";
+    const canDraw =
+      config.modes.includes("drawing") &&
+      (row.objectType === "kanji"
+        ? drawableKanji(row.characters).length > 0
+        : row.objectType === "vocabulary" && (row.componentSubjectIds?.length ?? 0) > 0);
+    if (!canMean && !canRead && !canDraw) return [];
+    if (config.stages.length > 0 && !config.stages.includes(stage)) return [];
+    if (config.levelMin != null && row.level < config.levelMin) return [];
+    if (config.levelMax != null && row.level > config.levelMax) return [];
+    if (config.neverReviewed && (reviewCount > 0 || attempts > 0)) return [];
+    if ((config.accuracyMin != null || config.accuracyMax != null || config.weakOnly) && accuracy == null) {
+      return [];
+    }
+    if (config.accuracyMin != null && (accuracy ?? 0) < config.accuracyMin) return [];
+    if (config.accuracyMax != null && (accuracy ?? 0) > config.accuracyMax) return [];
+    if (config.reviewMin != null && reviewCount < config.reviewMin) return [];
+    if (config.reviewMax != null && reviewCount > config.reviewMax) return [];
+    if (config.weakOnly && (accuracy == null || accuracy >= config.weakThreshold)) return [];
+    if (config.dueOnly) {
+      if (stage < 1 || stage >= COMPLETED_STAGE || availableAt == null || availableAt > now) return [];
+    }
+    if (config.excludeRecent && lastReview != null && lastReview > dayAgo) return [];
+    return [{ row, accuracy, lastReview, availableAt, unlockedAt, reviewCount }];
+  });
+  const sorted = [...eligible];
+  if (config.sort === "random") {
+    for (let index = sorted.length - 1; index > 0; index -= 1) {
+      const swap = Math.floor(Math.random() * (index + 1));
+      const current = sorted[index]!;
+      sorted[index] = sorted[swap]!;
+      sorted[swap] = current;
+    }
+  } else {
+    sorted.sort((left, right) => {
+      if (config.sort === "review-oldest") return nullsLast(left.lastReview, right.lastReview, 1);
+      if (config.sort === "review-newest") return nullsLast(left.lastReview, right.lastReview, -1);
+      if (config.sort === "due-soonest") return nullsLast(left.availableAt, right.availableAt, 1);
+      if (config.sort === "due-latest") return nullsLast(left.availableAt, right.availableAt, -1);
+      if (config.sort === "accuracy-lowest") return nullsLast(left.accuracy, right.accuracy, 1);
+      if (config.sort === "accuracy-highest") return nullsLast(left.accuracy, right.accuracy, -1);
+      if (config.sort === "unlocked-newest") return nullsLast(left.unlockedAt, right.unlockedAt, -1);
+      if (config.sort === "level-desc") return right.row.level - left.row.level;
+      return left.row.level - right.row.level;
+    });
+  }
+  const picked = (config.limit == null ? sorted : sorted.slice(0, config.limit)).map((item) => ({
+    ...item.row,
+    srsStage: item.row.srsStage ?? 0,
+    incorrectCount: item.row.incorrectCount ?? 0,
+  }));
+  const built = picked.length > 40 ? await quizCardsWithoutPeers(picked) : await quizCards(picked);
+  const items = built.flatMap((card) => {
+    const prompts: Array<"meaning" | "reading" | "word"> = [];
+    if (config.modes.includes("meaning") && card.prompts.includes("meaning")) prompts.push("meaning");
+    if (config.modes.includes("reading") && card.prompts.includes("reading")) prompts.push("reading");
+    const drawn = drawableKanji(card.characters);
+    let next = card;
+    if (config.modes.includes("drawing") && card.objectType === "kanji" && drawn.length > 0) {
+      const meaning = card.gradeKey.meanings.find((item) => item.primary)?.meaning ?? card.gradeKey.meanings[0]?.meaning ?? "";
+      const reading = card.gradeKey.readings.find((item) => item.primary)?.reading ?? card.gradeKey.readings[0]?.reading ?? "";
+      next = {
+        ...card,
+        wordKanji: drawn,
+        wordMeaning: meaning,
+        wordReading: reading,
+        gradeKey: { ...card.gradeKey, wordKanji: drawn },
+      };
+      prompts.push("word");
+    } else if (config.modes.includes("drawing") && card.prompts.includes("word") && card.wordKanji.length > 0) {
+      prompts.push("word");
+    }
+    if (prompts.length === 0) return [];
+    return [{ ...next, prompts }];
+  });
+  return { items };
+}
+
+async function quizCardsWithoutPeers(rows: QuizSource[]) {
+  const lookup = await componentLookup(rows.flatMap((row) => row.componentSubjectIds ?? []));
+  return rows.map((row) => {
+    const ids = row.componentSubjectIds ?? [];
+    const wordKanji = compositionKanji(ids, (id) => lookup.get(id));
+    const card = quizCard(row, wordKanji);
+    return {
+      ...card,
+      gradeKey: gradeKeyFor(
+        row,
+        card.wordKanji,
+        componentKanjiReadings(ids, lookup),
+        [],
+        componentRadicalMeanings(ids, lookup),
+      ),
+    };
+  });
+}
+
 type StudyDb = Pick<typeof db, "insert" | "update" | "delete" | "select">;
 
 async function writeAttempts(
@@ -839,8 +1130,10 @@ async function writeAttempts(
   fromStage: number,
   toStage: number,
   executor: StudyDb = db,
+  asked?: { meaning: boolean; reading: boolean; word: boolean },
 ) {
   for (const prompt of promptsFor(objectType)) {
+    if (asked && !asked[prompt]) continue;
     const correct = prompt === "meaning" ? graded.meaningCorrect === true : graded.readingCorrect === true;
     await executor.insert(mojiMoriReviewsTable).values({
       userId,
@@ -853,7 +1146,7 @@ async function writeAttempts(
     });
     await bumpAnswerStat(userId, subjectId, prompt, correct, executor);
   }
-  if (graded.wordCorrect !== null) {
+  if (graded.wordCorrect !== null && (!asked || asked.word)) {
     await executor.insert(mojiMoriReviewsTable).values({
       userId,
       subjectId,
@@ -965,17 +1258,35 @@ export async function gradeStudyItem(
   }
 
   let wordCorrect: boolean | null = null;
-  if (kind !== "lesson" && subject.objectType === "vocabulary") {
+  const asked = {
+    meaning: meaning !== undefined,
+    reading: reading !== undefined,
+    word: word !== undefined,
+  };
+  if (kind !== "lesson" && subject.objectType === "vocabulary" && (kind !== "extra" || asked.word)) {
     const lookup = await componentLookup(subject.componentSubjectIds);
     const kanji = compositionKanji(subject.componentSubjectIds, (id) => lookup.get(id)).join("");
     if (kanji) {
       wordCorrect = wordAnswerCorrect(word, subject.meanings, subject.auxiliaryMeanings, kanji);
     }
   }
+  if (kind === "extra" && asked.word && subject.objectType === "kanji" && subject.characters) {
+    wordCorrect = wordAnswerCorrect(word, subject.meanings, subject.auxiliaryMeanings, subject.characters);
+  }
   const scored = applyWordGrade(graded, wordCorrect);
 
   if (kind === "extra") {
-    await writeAttempts(userId, subjectId, "extra", subject.objectType, scored, fromStage, fromStage);
+    await writeAttempts(
+      userId,
+      subjectId,
+      "extra",
+      subject.objectType,
+      scored,
+      fromStage,
+      fromStage,
+      db,
+      asked,
+    );
     return { ...scored, srsStage: fromStage, level: levelBefore, leveledUp: false };
   }
 
