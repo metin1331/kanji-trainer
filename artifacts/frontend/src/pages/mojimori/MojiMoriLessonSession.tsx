@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type AnimationEvent } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import {
   ArrowRight,
@@ -27,6 +28,7 @@ import {
   type MojiMoriSubjectSummary,
 } from "../../lib/mojiMori";
 import {
+  mojiMoriSubjectQuery,
   useMojiMoriLessons,
   useMojiMoriNotes,
   useMojiMoriStudySettings,
@@ -166,6 +168,7 @@ export function MojiMoriLessonSession({ ids }: { ids?: number[] }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const prefs = useMojiMoriStudySettings();
+  const queryClient = useQueryClient();
   const stageCardId =
     phase === "quiz" ? tasks[0]?.id ?? null : order?.[index]?.id ?? null;
   useQuizStageChrome(
@@ -184,6 +187,13 @@ export function MojiMoriLessonSession({ ids }: { ids?: number[] }) {
   }, [order, lessons.data, lessons.isFetching]);
 
   const card = order?.[index] ?? null;
+
+  useEffect(() => {
+    if (!order || phase !== "teach") return;
+    const nextId = order[index + 1]?.id;
+    if (!nextId) return;
+    void queryClient.prefetchQuery(mojiMoriSubjectQuery(nextId));
+  }, [order, index, phase, queryClient]);
   const task = phase === "quiz" ? tasks[0] ?? null : null;
   const activeId = phase === "quiz" ? task?.id ?? null : card?.id ?? null;
   const detailQuery = useMojiMoriSubject(activeId);
