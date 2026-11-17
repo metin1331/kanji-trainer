@@ -107,7 +107,7 @@ function SubjectCards({ subjects }: { subjects: MojiMoriSubjectSummary[] }) {
   return (
     <div className="flex flex-wrap gap-3">
       {subjects.map((subject) => (
-        <LevelSubjectCard key={subject.id} subject={subject} />
+        <LevelSubjectCard key={subject.id} subject={subject} showBar={false} />
       ))}
     </div>
   );

@@ -83,21 +83,21 @@ const openToastIds = new Set<string>();
 let dismissInstantly = false;
 
 const add = (input: string | ToastOptions, extra?: ToastOptions) => {
-  if (visibleToasts > 0) return "";
+  if (openToastIds.size > 0 || visibleToasts > 0) dismissToastsNow();
   dismissInstantly = false;
   const options = typeof input === "string" ? { title: input, ...extra } : input;
   const previousOnRemove = options.onRemove;
-  visibleToasts += 1;
   const id = toastManager.add({
     ...options,
     onRemove: () => {
       openToastIds.delete(id);
-      visibleToasts = Math.max(0, visibleToasts - 1);
+      visibleToasts = openToastIds.size;
       if (openToastIds.size === 0) dismissInstantly = false;
       previousOnRemove?.();
     },
   });
   if (id) openToastIds.add(id);
+  visibleToasts = openToastIds.size;
   return id;
 };
 
@@ -276,7 +276,7 @@ export default function Toaster({
 }: ToasterProps) {
   return (
     <ToastPrimitive.Provider
-      limit={limit}
+      limit={Math.max(limit, 2)}
       timeout={timeout}
       toastManager={manager ?? toastManager}
     >

@@ -189,7 +189,7 @@ export function LevelSubjectCard({
       type="button"
       onClick={() => (onOpen ? onOpen(subject) : navigate(mojiMoriSubjectHref(subject)))}
       className={`flex w-max max-w-full flex-col items-center ${
-        className ? ` ${className}` : ""
+        className ? `${className}` : ""
       }`}
     >
       <ProgressSquare subject={subject} size="sm" showBar={showBar} />

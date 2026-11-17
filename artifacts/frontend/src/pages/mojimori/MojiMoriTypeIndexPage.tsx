@@ -168,7 +168,12 @@ export function MojiMoriTypeIndexPage() {
                 </div>
                 <div className="flex flex-wrap gap-3 p-4">
                   {subjects.map((subject) => (
-                    <LevelSubjectCard key={subject.id} subject={subject} />
+                    <LevelSubjectCard
+                      key={subject.id}
+                      subject={subject}
+                      caption
+                      showBar={false}
+                    />
                   ))}
                 </div>
               </section>

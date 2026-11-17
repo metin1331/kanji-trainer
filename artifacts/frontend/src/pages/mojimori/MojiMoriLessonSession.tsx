@@ -28,6 +28,7 @@ import {
   type MojiMoriSubjectSummary,
 } from "../../lib/mojiMori";
 import {
+  mojiMoriLessonsQuery,
   mojiMoriSubjectQuery,
   useMojiMoriLessons,
   useMojiMoriNotes,
@@ -46,6 +47,7 @@ import {
   ReviewInfo,
   studyCardToSummary,
   useQuizStageChrome,
+  useQuizToastAnchor,
 } from "./MojiMoriReviewSession";
 import { KanjiReview, KanjiStrokeQuiz, WordReveal } from "./KanjiStrokeQuiz";
 import { StrokeGlyphTrigger } from "./MojiStrokeModal";
@@ -169,6 +171,7 @@ export function MojiMoriLessonSession({
   const [drawTry, setDrawTry] = useState(0);
   const methodsRef = useRef<HTMLDivElement>(null);
   const answers = useRef<Record<number, Saved>>({});
+  const [moreLessons, setMoreLessons] = useState<boolean | null>(null);
   const leaving = useRef(false);
   const land = useRef<"start" | "end" | "stay">("start");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -201,6 +204,10 @@ export function MojiMoriLessonSession({
     void queryClient.prefetchQuery(mojiMoriSubjectQuery(nextId));
   }, [order, index, phase, queryClient]);
   const task = phase === "quiz" ? tasks[0] ?? null : null;
+  useQuizToastAnchor(
+    phase === "quiz" && Boolean(task),
+    `${task?.id ?? ""}:${task?.prompt ?? ""}:${sheet}:${pending ?? ""}`,
+  );
   const activeId = phase === "quiz" ? task?.id ?? null : card?.id ?? null;
   const detailQuery = useMojiMoriSubject(activeId);
   const detail = detailQuery.data?.id === activeId ? detailQuery.data : null;
@@ -534,8 +541,25 @@ export function MojiMoriLessonSession({
 
   useEffect(() => {
     if (phase !== "quiz" || tasks.length > 0 || !order?.length) return;
-    void studyFlush.flush().catch(() => toast(t("mojimori.study.saveFailed")));
-  }, [phase, tasks.length, order, studyFlush, t]);
+    let cancel = false;
+    void studyFlush
+      .flush()
+      .then(() => queryClient.fetchQuery({ ...mojiMoriLessonsQuery(), staleTime: 0 }))
+      .then((data) => {
+        if (cancel) return;
+        const today =
+          data.dailyRemaining == null
+            ? data.available
+            : Math.min(data.available, data.dailyRemaining);
+        setMoreLessons(today > 0);
+      })
+      .catch(() => {
+        if (!cancel) toast(t("mojimori.study.saveFailed"));
+      });
+    return () => {
+      cancel = true;
+    };
+  }, [phase, tasks.length, order, studyFlush, t, queryClient]);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -611,6 +635,7 @@ export function MojiMoriLessonSession({
           percent={stats.percent}
           onHome={finishLesson}
           onContinue={onContinue ? continueLesson : undefined}
+          canContinue={moreLessons === true}
           title={t("mojimori.study.lessonsDone")}
         />
       </div>
@@ -670,12 +695,12 @@ export function MojiMoriLessonSession({
         >
           {drawing ? <span lang="ja">{shown.wordReading || "…"}</span> : <Glyph card={shown} />}
           {showWordMeaning && shown.wordMeaning ? (
-            <p className="mm-quiz__word-meaning">{shown.wordMeaning}</p>
+            <span className="mm-quiz__word-meaning">{shown.wordMeaning}</span>
           ) : null}
           {showWordSpelling && shown.characters ? (
-            <p className="mm-quiz__word-spelling" lang="ja">
+            <span className="mm-quiz__word-spelling" lang="ja">
               {shown.characters}
-            </p>
+            </span>
           ) : null}
         </StrokeGlyphTrigger>
         {phase === "teach" && meaning ? <p className="mm-lesson__meaning">{meaning}</p> : null}
@@ -759,7 +784,13 @@ export function MojiMoriLessonSession({
                   onOpen={(subject) => setBrowse([subject.id])}
                 />
               ) : null}
-              {slide === "meaning" ? <MeaningSlide card={card} detail={detail} /> : null}
+              {slide === "meaning" ? (
+                <MeaningSlide
+                  card={card}
+                  detail={detail}
+                  onOpen={(subject) => setBrowse([subject.id])}
+                />
+              ) : null}
               {slide === "reading" ? (
                 <ReadingSlide card={card} detail={detail} playing={playing} onPlay={play} />
               ) : null}
@@ -1245,18 +1276,33 @@ function CompositionSlide({
   );
 }
 
+function FactChips({ items }: { items: string[] }) {
+  return (
+    <div className="subject-facts__values">
+      {items.map((item) => (
+        <span key={item} className="subject-facts__chip">
+          {item}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function MeaningSlide({
   card,
   detail,
+  onOpen,
 }: {
   card: MojiMoriStudyCard;
   detail: MojiMoriSubjectDetail | null;
+  onOpen: (subject: MojiMoriSubjectSummary) => void;
 }) {
   const { t } = useTranslation();
   const others = (detail?.meanings ?? card.meanings ?? []).filter((item) => item.acceptedAnswer && !item.primary);
+  const accepted = detail?.auxiliaryMeanings ?? [];
   const parts = detail?.partsOfSpeech ?? [];
   const story = detail?.meaningMnemonic || card.meaningMnemonic || "";
-  const aside = others.length > 0 || parts.length > 0;
+  const aside = others.length > 0 || accepted.length > 0 || parts.length > 0;
   return (
     <div className={aside ? "mm-lesson__split" : "mm-lesson__copy"}>
       {aside ? (
@@ -1264,13 +1310,19 @@ function MeaningSlide({
           {others.length > 0 ? (
             <section>
               <h2>{t("mojimori.study.otherMeanings")}</h2>
-              <p>{others.map((item) => item.meaning).join(", ")}</p>
+              <FactChips items={others.map((item) => item.meaning)} />
+            </section>
+          ) : null}
+          {accepted.length > 0 ? (
+            <section>
+              <h2>{t("mojimori.alsoAccepted")}</h2>
+              <FactChips items={accepted.map((item) => item.meaning)} />
             </section>
           ) : null}
           {parts.length > 0 ? (
             <section>
               <h2>{t("mojimori.wordType")}</h2>
-              <p>{parts.map((part) => part.replaceAll("_", " ")).join(", ")}</p>
+              <FactChips items={parts.map((part) => part.replaceAll("_", " "))} />
             </section>
           ) : null}
         </aside>
@@ -1282,7 +1334,30 @@ function MeaningSlide({
             : t("mojimori.study.mnemonic")}
         </h2>
         <MnemonicText text={story} />
+        {card.objectType === "radical" && detail?.mnemonicImageUrl ? (
+          <img
+            className="moji-mnemonic-image"
+            src={detail.mnemonicImageUrl}
+            alt={detail.mnemonicImageAlt || ""}
+          />
+        ) : null}
         {detail ? <LessonNote detail={detail} field="meaning" /> : null}
+        {card.objectType === "radical" && (detail?.related.amalgamations.length ?? 0) > 0 ? (
+          <section className="mm-lesson__relations">
+            <h2>{t("mojimori.foundInKanji")}</h2>
+            <div className="flex flex-wrap gap-3">
+              {detail?.related.amalgamations.map((subject) => (
+                <LevelSubjectCard
+                  key={subject.id}
+                  subject={subject}
+                  caption
+                  showBar={false}
+                  onOpen={onOpen}
+                />
+              ))}
+            </div>
+          </section>
+        ) : null}
       </div>
     </div>
   );

@@ -38,6 +38,7 @@ import {
   useMojiMoriStudySettings,
   mojiMoriReviewCardsQuery,
   mojiMoriReviewResumeQuery,
+  mojiMoriReviewsQuery,
   mojiMoriSubjectQuery,
   useMojiMoriSubject,
   useStudyFlush,
@@ -353,6 +354,46 @@ function Glyph({
   return <span>?</span>;
 }
 
+/** Pins quiz toasts to the bar directly under `.mm-quiz__tools`. */
+export function useQuizToastAnchor(active: boolean, token: string) {
+  useLayoutEffect(() => {
+    if (!active) return;
+    const root = document.documentElement;
+    const place = () => {
+      const tools = document.querySelector<HTMLElement>(".mm-quiz__tools");
+      if (!tools) return;
+      const rect = tools.getBoundingClientRect();
+      root.style.setProperty(
+        "--mm-toast-top",
+        `${Math.round(rect.bottom + 8)}px`,
+      );
+      root.style.setProperty("--mm-toast-left", `${Math.round(rect.left)}px`);
+      root.style.setProperty("--mm-toast-width", `${Math.round(rect.width)}px`);
+    };
+    place();
+    const tools = document.querySelector<HTMLElement>(".mm-quiz__tools");
+    if (!tools) return;
+    const box = tools.closest(".mm-quiz") ?? tools;
+    const observer = new ResizeObserver(place);
+    observer.observe(box);
+    observer.observe(tools);
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    window.visualViewport?.addEventListener("resize", place);
+    window.visualViewport?.addEventListener("scroll", place);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+      window.visualViewport?.removeEventListener("resize", place);
+      window.visualViewport?.removeEventListener("scroll", place);
+      root.style.removeProperty("--mm-toast-top");
+      root.style.removeProperty("--mm-toast-left");
+      root.style.removeProperty("--mm-toast-width");
+    };
+  }, [active, token]);
+}
+
 export function useQuizStageChrome(active: boolean, token: string) {
   useEffect(() => {
     if (!active) return;
@@ -457,6 +498,7 @@ export function MojiMoriReviewSession({
   const [lapsesOn, setLapsesOn] = useState(false);
   const [lapseTotal, setLapseTotal] = useState(0);
   const [checkpointSaved, setCheckpointSaved] = useState(false);
+  const [moreReviews, setMoreReviews] = useState<boolean | null>(null);
   const [saving, setSaving] = useState(false);
   const resumeQuery = useQuery({
     ...mojiMoriReviewResumeQuery(),
@@ -789,36 +831,10 @@ export function MojiMoriReviewSession({
     };
   }, []);
 
-  useLayoutEffect(() => {
-    const tools = document.querySelector<HTMLElement>(".mm-quiz__tools");
-    if (!tools) return;
-    const root = document.documentElement;
-    const place = () => {
-      const rect = tools.getBoundingClientRect();
-      root.style.setProperty(
-        "--mm-toast-top",
-        `${Math.round(rect.bottom + 8)}px`,
-      );
-      root.style.setProperty("--mm-toast-left", `${Math.round(rect.left)}px`);
-      root.style.setProperty("--mm-toast-width", `${Math.round(rect.width)}px`);
-    };
-    place();
-    const box = tools.closest(".mm-quiz") ?? tools;
-    const observer = new ResizeObserver(place);
-    observer.observe(box);
-    window.addEventListener("resize", place);
-    window.visualViewport?.addEventListener("resize", place);
-    window.visualViewport?.addEventListener("scroll", place);
-    return () => {
-      observer.disconnect();
-      window.removeEventListener("resize", place);
-      window.visualViewport?.removeEventListener("resize", place);
-      window.visualViewport?.removeEventListener("scroll", place);
-      root.style.removeProperty("--mm-toast-top");
-      root.style.removeProperty("--mm-toast-left");
-      root.style.removeProperty("--mm-toast-width");
-    };
-  }, [card?.id, sheet, pending]);
+  useQuizToastAnchor(
+    Boolean(card),
+    `${card?.id ?? ""}:${sheet}:${pending ?? ""}`,
+  );
 
   useQuizStageChrome(
     Boolean(card),
@@ -1247,9 +1263,11 @@ export function MojiMoriReviewSession({
     if (source === "review") {
       void flushReviewOutbox()
         .then(() => deleteReviewCheckpoint())
-        .then(() => {
+        .then(async () => {
           setCheckpointSaved(false);
-          return queryClient.invalidateQueries({ queryKey: ["mojimori"] });
+          await queryClient.invalidateQueries({ queryKey: ["mojimori"] });
+          const fresh = await queryClient.fetchQuery(mojiMoriReviewsQuery());
+          setMoreReviews(fresh.due > 0);
         })
         .catch(() => toast(t("mojimori.study.saveFailed")));
       return;
@@ -1414,6 +1432,7 @@ export function MojiMoriReviewSession({
             percent={percent}
             onHome={finishHome}
             onContinue={onContinue ? continueSession : undefined}
+            canContinue={moreReviews === true}
             title={t("mojimori.study.reviewsDone")}
           />
         );
@@ -2020,6 +2039,7 @@ export function ReviewCompletePanel({
   percent,
   onHome,
   onContinue,
+  canContinue = false,
   title,
 }: {
   cards: MojiMoriStudyCard[];
@@ -2029,6 +2049,7 @@ export function ReviewCompletePanel({
   percent: number;
   onHome: () => void;
   onContinue?: () => void;
+  canContinue?: boolean;
   title: string;
 }) {
   const { t } = useTranslation();
@@ -2129,7 +2150,7 @@ export function ReviewCompletePanel({
               {t("mojimori.study.answers")}
             </button>
             {onContinue ? (
-              <button type="button" className="moji-btn-primary" onClick={onContinue}>
+              <button type="button" className="moji-btn" onClick={onContinue} disabled={!canContinue}>
                 {t("common.continue")}
               </button>
             ) : null}
@@ -2394,16 +2415,22 @@ export function ReviewInfo({
         onToggle={() => toggle("meaning")}
       >
         <Fact label={t("mojimori.primary")} value={primary} />
+        {detail.auxiliaryMeanings.length > 0 ? (
+          <Fact
+            label={t("mojimori.alsoAccepted")}
+            values={detail.auxiliaryMeanings.map((item) => item.meaning)}
+          />
+        ) : null}
         {alternatives.length > 0 ? (
           <Fact
             label={t("mojimori.study.alternative")}
-            value={alternatives.map((item) => item.meaning).join(", ")}
+            values={alternatives.map((item) => item.meaning)}
           />
         ) : null}
         {detail.partsOfSpeech.length > 0 ? (
           <Fact
             label={t("mojimori.wordType")}
-            value={detail.partsOfSpeech.join(", ")}
+            values={detail.partsOfSpeech.map((part) => part.replaceAll("_", " "))}
           />
         ) : null}
         <h3>{storyLabel}</h3>
@@ -2664,11 +2691,29 @@ function Hint({ text }: { text: string }) {
   );
 }
 
-function Fact({ label, value }: { label: string; value: string }) {
+function Fact({
+  label,
+  value,
+  values,
+}: {
+  label: string;
+  value?: string;
+  values?: string[];
+}) {
   return (
     <p className="mm-fact">
       <span>{label}</span>
-      <strong>{value}</strong>
+      {values ? (
+        <span className="subject-facts__values">
+          {values.map((item) => (
+            <span key={item} className="subject-facts__chip">
+              {item}
+            </span>
+          ))}
+        </span>
+      ) : (
+        <strong>{value}</strong>
+      )}
     </p>
   );
 }

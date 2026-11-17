@@ -1622,6 +1622,7 @@ button.forecast-row {
   padding: 0.45rem 0.85rem;
   font-size: 0.875rem;
   font-weight: 600;
+  cursor: pointer;
 }
 
 .moji-btn-primary {
@@ -1642,6 +1643,11 @@ button.forecast-row {
     color 220ms cubic-bezier(0.22, 1, 0.36, 1),
     background-color 220ms cubic-bezier(0.22, 1, 0.36, 1),
     border-color 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.moji-btn--picker {
+  border: 0;
+  outline: 1px solid var(--color-line);
 }
 
 .mm-quiz .moji-btn {
@@ -2695,7 +2701,7 @@ button.forecast-row {
 .mm-stroke-modal__backdrop {
   position: fixed;
   inset: 0;
-  z-index: 999;
+  z-index: 1200;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2868,7 +2874,11 @@ button.forecast-row {
 }
 
 .mm-lesson__glyph.mm-stroke-glyph-trigger {
+  position: relative;
+  z-index: 3;
   justify-content: center;
+  pointer-events: auto;
+  touch-action: manipulation;
 }
 
 .mm-stroke-modal__svg {
@@ -3167,6 +3177,7 @@ button.forecast-row {
 }
 
 .mm-quiz__word-meaning {
+  display: block;
   margin: 0;
   padding: 0 1rem;
   font-size: clamp(1rem, 2.4vw, 1.25rem);
@@ -3176,6 +3187,7 @@ button.forecast-row {
 }
 
 .mm-quiz__word-spelling {
+  display: block;
   margin: 0;
   font-size: clamp(2rem, 7vw, 3rem);
   font-weight: 500;
@@ -4231,6 +4243,23 @@ html:has(.review-complete) .moji-route-bar {
   text-transform: capitalize;
 }
 
+.mm-fact .subject-facts__values {
+  flex: 1;
+  min-width: 0;
+}
+
+.mm-fact .subject-facts__chip,
+.mm-lesson__aside .subject-facts__chip {
+  color: var(--color-ink);
+  font-weight: 650;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.mm-lesson__aside .subject-facts__values {
+  margin-top: 0.45rem;
+}
+
 /* .mm-fold {
   border-bottom: 1px solid var(--color-line);
 } */
@@ -5049,6 +5078,13 @@ html:has(.review-complete) .moji-route-bar {
   .mm-lesson__arrow {
     width: 2rem;
   }
+}
+
+.subject-tile {
+  padding: 0.75rem;
+  background: var(--color-surface);
+  border-radius: 12px;
+  border: solid 1px var(--color-nav-border);
 }
 
 .subject-hero {

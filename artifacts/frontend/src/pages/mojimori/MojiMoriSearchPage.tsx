@@ -5,7 +5,7 @@ import { MojiMoriLoading } from "./MojiMoriLoading";
 import { useTranslation } from "../../i18n/I18nProvider";
 import { useMojiMoriSubjects } from "../../hooks/useMojiMori";
 import { MojiMoriLayout } from "./MojiMoriLayout";
-import { SubjectTileGrid } from "./SubjectTile";
+import { LevelSubjectCard } from "./SubjectTile";
 
 function readQuery(search: string): string {
   const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
@@ -74,13 +74,23 @@ export function MojiMoriSearchPage() {
             {t("mojimori.searchCount", { count: data?.length ?? 0, query: q })}
           </p>
           {data?.length ? (
-            <SubjectTileGrid
-              subjects={[...data].sort(
-                (a, b) =>
-                  (SEARCH_TYPE_ORDER[a.objectType] ?? 9) -
-                  (SEARCH_TYPE_ORDER[b.objectType] ?? 9),
-              )}
-            />
+            <div className="flex flex-wrap gap-2">
+              {[...data]
+                .sort(
+                  (a, b) =>
+                    (SEARCH_TYPE_ORDER[a.objectType] ?? 9) -
+                    (SEARCH_TYPE_ORDER[b.objectType] ?? 9),
+                )
+                .map((subject) => (
+                  <LevelSubjectCard
+                    key={subject.id}
+                    subject={subject}
+                    caption
+                    showBar={false}
+                    className="subject-tile"
+                  />
+                ))}
+            </div>
           ) : (
             <p className="text-sm text-[#888]">{t("mojimori.empty")}</p>
           )}

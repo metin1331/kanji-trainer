@@ -53,6 +53,11 @@ export function MojiMoriStudyWidgets({
               count: study.reviews.apprenticeDue,
             })}
           </p>
+          <p className="invisible pt-0.5 text-sm text-[var(--color-muted)]">
+            {t("mojimori.study.apprenticeDue", {
+              count: study.reviews.apprenticeDue,
+            })}
+          </p>
           <div className="moji-reviews-widget__actions">
             <Link href="/mojimori/reviews" className="moji-btn-primary">
               {t("mojimori.study.startReviews")}

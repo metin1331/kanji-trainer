@@ -173,10 +173,16 @@ export function MojiMoriLevelDetailPage() {
                       }}
                     />
                   </div>
-                  <div className="flex flex-wrap gap-3 p-4">
+                  <div className="flex flex-wrap gap-2 p-4">
                     {items.length ? (
                       items.map((subject) => (
-                        <LevelSubjectCard key={subject.id} subject={subject} />
+                        <LevelSubjectCard
+                          key={subject.id}
+                          subject={subject}
+                          caption
+                          showBar={false}
+                          className="subject-tile"
+                        />
                       ))
                     ) : (
                       <p className="text-sm text-[#888]">{t("mojimori.empty")}</p>

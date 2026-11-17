@@ -1,6 +1,9 @@
 import { Link } from "wouter";
 import { useTranslation } from "../../i18n/I18nProvider";
-import type { MojiMoriStudySnapshot, MojiMoriTypeCounts } from "../../lib/mojiMori";
+import type {
+  MojiMoriStudySnapshot,
+  MojiMoriTypeCounts,
+} from "../../lib/mojiMori";
 
 const TYPE_ORDER = ["radical", "kanji", "vocabulary"] as const;
 
@@ -33,7 +36,9 @@ export function TodaysLessonsWidget({
 
   return (
     <section className="glass-panel moji-lessons-widget p-5">
-      <h2 className="text-lg sm:text-base font-semibold">{t("mojimori.study.todaysLessons")}</h2>
+      <h2 className="text-lg font-semibold sm:text-base">
+        {t("mojimori.study.todaysLessons")}
+      </h2>
       <div className="pt-3"></div>
       <div className="moji-queue-count">
         <p className="moji-lessons-widget__count">{today}</p>
@@ -48,7 +53,11 @@ export function TodaysLessonsWidget({
         <p className="pt-0.5 text-sm text-[var(--color-muted)]">
           {t("mojimori.study.unlockedPile", { count: lessons.available })}
         </p>
-      ) : null}
+      ) : (
+        <p className="invisible pt-0.5 text-sm text-[var(--color-muted)]">
+          {t("mojimori.study.unlockedPile", { count: lessons.available })}
+        </p>
+      )}
       <div className="moji-lessons-widget__actions">
         {canStart ? (
           <Link href="/mojimori/lessons" className="moji-btn-primary">
@@ -60,7 +69,10 @@ export function TodaysLessonsWidget({
           </span>
         )}
         {canPick ? (
-          <Link href="/mojimori/lessons/picker" className="moji-btn">
+          <Link
+            href="/mojimori/lessons/picker"
+            className="moji-btn moji-btn--picker"
+          >
             {t("mojimori.study.advanced")}
           </Link>
         ) : (

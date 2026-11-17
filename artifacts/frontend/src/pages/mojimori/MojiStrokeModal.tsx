@@ -308,7 +308,9 @@ export function MojiStrokeModal({
   }, [onClose]);
 
   function handleBackdropClick(event: MouseEvent) {
-    if (event.target === backdropRef.current) onClose();
+    if (event.target === backdropRef.current && backdropRef.current.dataset.pressed === "1") {
+      onClose();
+    }
   }
 
   if (chars.length === 0) return null;
@@ -317,6 +319,11 @@ export function MojiStrokeModal({
     <div
       ref={backdropRef}
       className="moji-mori mm-stroke-modal__backdrop"
+      onPointerDown={(event) => {
+        if (backdropRef.current) {
+          backdropRef.current.dataset.pressed = event.target === backdropRef.current ? "1" : "";
+        }
+      }}
       onClick={handleBackdropClick}
       role="presentation"
     >
@@ -463,7 +470,12 @@ export function StrokeSubjectTrigger({
       <button
         type="button"
         className={`mm-stroke-glyph-trigger${className ? ` ${className}` : ""}`}
-        onClick={() => setOpen(true)}
+        onPointerDown={(event) => {
+          if (event.button !== 0) return;
+          event.preventDefault();
+          event.stopPropagation();
+          setOpen(true);
+        }}
       >
         {children}
       </button>
