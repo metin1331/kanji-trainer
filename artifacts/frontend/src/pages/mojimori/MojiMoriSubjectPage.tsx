@@ -105,9 +105,9 @@ function StageScroller({
 
 function SubjectCards({ subjects }: { subjects: MojiMoriSubjectSummary[] }) {
   return (
-    <div className="flex flex-wrap gap-3">
+    <div className="flex flex-wrap gap-2">
       {subjects.map((subject) => (
-        <LevelSubjectCard key={subject.id} subject={subject} showBar={false} />
+        <LevelSubjectCard key={subject.id} subject={subject} showBar={false} className="subject-tile"/>
       ))}
     </div>
   );
@@ -503,13 +503,14 @@ export function MojiMoriSubjectPage() {
 
         {data.objectType === "vocabulary" && similar.length > 0 ? (
           <Section id="similar" title={t("mojimori.visuallySimilar")}>
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-wrap gap-2">
               {similar.map((subject) => (
                 <LevelSubjectCard
                   key={subject.id}
                   subject={subject}
                   caption
                   showBar={false}
+                  className="subject-tile"
                 />
               ))}
             </div>

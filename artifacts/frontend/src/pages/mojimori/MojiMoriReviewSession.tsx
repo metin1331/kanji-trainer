@@ -2560,7 +2560,7 @@ export function ReviewInfo({
           open={open.found}
           onToggle={() => toggle("found")}
         >
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap gap-2">
             {detail.related.amalgamations.map((subject) => (
               <LevelSubjectCard
                 key={subject.id}
@@ -2568,6 +2568,7 @@ export function ReviewInfo({
                 caption
                 showBar={false}
                 onOpen={onOpen}
+                className="subject-tile"
               />
             ))}
           </div>
@@ -2582,7 +2583,7 @@ export function ReviewInfo({
         >
           <div className="mm-compose">
             {detail.related.amalgamations.map((subject) => (
-              <LevelSubjectCard key={subject.id} subject={subject} showBar={false} onOpen={onOpen} />
+              <LevelSubjectCard key={subject.id} subject={subject} showBar={false} onOpen={onOpen} className="subject-tile" />
             ))}
           </div>
         </Fold>
@@ -2593,7 +2594,7 @@ export function ReviewInfo({
           open={open.similar}
           onToggle={() => toggle("similar")}
         >
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap gap-2">
             {detail.related.visuallySimilar.map((subject) => (
               <LevelSubjectCard
                 key={subject.id}
@@ -2601,6 +2602,7 @@ export function ReviewInfo({
                 caption
                 showBar={false}
                 onOpen={onOpen}
+                className="subject-tile"
               />
             ))}
           </div>

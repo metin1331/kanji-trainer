@@ -1255,9 +1255,9 @@ function CompositionSlide({
       {card.objectType === "kanji" && similar.length > 0 ? (
         <section className="mm-lesson__relations">
           <h2>{t("mojimori.visuallySimilar")}</h2>
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap gap-2">
             {similar.map((subject) => (
-              <LevelSubjectCard key={subject.id} subject={subject} caption showBar={false} onOpen={onOpen} />
+              <LevelSubjectCard key={subject.id} subject={subject} caption showBar={false} onOpen={onOpen} className="subject-tile" />
             ))}
           </div>
         </section>
@@ -1265,9 +1265,9 @@ function CompositionSlide({
       {card.objectType === "kanji" && found.length > 0 ? (
         <section className="mm-lesson__relations">
           <h2>{t("mojimori.foundInVocabulary")}</h2>
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap gap-2">
             {found.map((subject) => (
-              <LevelSubjectCard key={subject.id} subject={subject} caption showBar={false} onOpen={onOpen} />
+              <LevelSubjectCard key={subject.id} subject={subject} caption showBar={false} onOpen={onOpen} className="subject-tile" />
             ))}
           </div>
         </section>
@@ -1345,7 +1345,7 @@ function MeaningSlide({
         {card.objectType === "radical" && (detail?.related.amalgamations.length ?? 0) > 0 ? (
           <section className="mm-lesson__relations">
             <h2>{t("mojimori.foundInKanji")}</h2>
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-wrap gap-2">
               {detail?.related.amalgamations.map((subject) => (
                 <LevelSubjectCard
                   key={subject.id}
@@ -1353,6 +1353,7 @@ function MeaningSlide({
                   caption
                   showBar={false}
                   onOpen={onOpen}
+                  className="subject-tile"
                 />
               ))}
             </div>
