@@ -168,7 +168,6 @@ const KANA_PAGES: {
     label: "あ",
     cells: [
       ["あ", "a"],
-      ["ー", "—"],
       ["い", "i"],
       ["う", "u"],
       ["え", "e"],
@@ -499,6 +498,10 @@ export function MojiMoriReviewSession({
   const [lapseTotal, setLapseTotal] = useState(0);
   const [checkpointSaved, setCheckpointSaved] = useState(false);
   const [moreReviews, setMoreReviews] = useState<boolean | null>(null);
+  const reviewDueAtStart = useRef<number | null>(null);
+  if (source === "review" && reviewDueAtStart.current == null && reviews.data) {
+    reviewDueAtStart.current = reviews.data.due;
+  }
   const [saving, setSaving] = useState(false);
   const resumeQuery = useQuery({
     ...mojiMoriReviewResumeQuery(),
@@ -1260,24 +1263,39 @@ export function MojiMoriReviewSession({
       (cards?.length ?? 0) === 0
     )
       return;
-    if (source === "review") {
-      void flushReviewOutbox()
-        .then(() => deleteReviewCheckpoint())
-        .then(async () => {
-          setCheckpointSaved(false);
-          await queryClient.invalidateQueries({ queryKey: ["mojimori"] });
-          const fresh = await queryClient.fetchQuery(mojiMoriReviewsQuery());
-          setMoreReviews(fresh.due > 0);
-        })
-        .catch(() => toast(t("mojimori.study.saveFailed")));
+    if (source !== "review") {
+      void studyFlush.flush().catch(() => toast(t("mojimori.study.saveFailed")));
       return;
     }
-    void studyFlush.flush().catch(() => toast(t("mojimori.study.saveFailed")));
+    let current = true;
+    void (async () => {
+      try {
+        await flushReviewOutbox();
+        await deleteReviewCheckpoint();
+        if (current) setCheckpointSaved(false);
+      } catch {
+        if (current) toast(t("mojimori.study.saveFailed"));
+      }
+      try {
+        await queryClient.invalidateQueries({ queryKey: ["mojimori", "reviews"] });
+        const fresh = await queryClient.fetchQuery({
+          ...mojiMoriReviewsQuery(),
+          staleTime: 0,
+        });
+        if (!current) return;
+        setMoreReviews((fresh.due ?? 0) > 0 || fresh.items.length > 0);
+      } catch {
+        if (current) toast(t("mojimori.study.saveFailed"));
+      }
+    })();
+    return () => {
+      current = false;
+    };
   }, [
     ready,
     reviewResumePending,
     queue.length,
-    cards,
+    cards?.length,
     studyFlush,
     source,
     t,
@@ -1423,6 +1441,9 @@ export function MojiMoriReviewSession({
     if (headNeedsCard) return null;
     if (!card || !current) {
       if (source === "review" && total > 0) {
+        const started = reviewDueAtStart.current;
+        const predictedMore =
+          started == null || cards == null ? null : started > cards.length;
         return (
           <ReviewCompletePanel
             cards={cards ?? []}
@@ -1432,7 +1453,7 @@ export function MojiMoriReviewSession({
             percent={percent}
             onHome={finishHome}
             onContinue={onContinue ? continueSession : undefined}
-            canContinue={moreReviews === true}
+            canContinue={moreReviews ?? predictedMore ?? false}
             title={t("mojimori.study.reviewsDone")}
           />
         );
@@ -2836,6 +2857,9 @@ export function KanaPad({
   return (
     <div className="mm-kana">
       <div className="mm-kana__tabs">
+        <button type="button" lang="ja" onClick={() => onInsert("ー")}>
+          ー
+        </button>
         {KANA_PAGES.map((item) => (
           <button
             key={item.id}

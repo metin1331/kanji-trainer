@@ -172,6 +172,13 @@ export function MojiMoriLessonSession({
   const methodsRef = useRef<HTMLDivElement>(null);
   const answers = useRef<Record<number, Saved>>({});
   const [moreLessons, setMoreLessons] = useState<boolean | null>(null);
+  const lessonSnap = useRef<{ available: number; dailyRemaining: number | null } | null>(null);
+  if (lessonSnap.current == null && lessons.data) {
+    lessonSnap.current = {
+      available: lessons.data.available,
+      dailyRemaining: lessons.data.dailyRemaining,
+    };
+  }
   const leaving = useRef(false);
   const land = useRef<"start" | "end" | "stay">("start");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -541,25 +548,32 @@ export function MojiMoriLessonSession({
 
   useEffect(() => {
     if (phase !== "quiz" || tasks.length > 0 || !order?.length) return;
-    let cancel = false;
-    void studyFlush
-      .flush()
-      .then(() => queryClient.fetchQuery({ ...mojiMoriLessonsQuery(), staleTime: 0 }))
-      .then((data) => {
-        if (cancel) return;
+    let current = true;
+    void (async () => {
+      try {
+        await studyFlush.flush();
+      } catch {
+        if (current) toast(t("mojimori.study.saveFailed"));
+      }
+      try {
+        const data = await queryClient.fetchQuery({
+          ...mojiMoriLessonsQuery(),
+          staleTime: 0,
+        });
+        if (!current) return;
         const today =
           data.dailyRemaining == null
             ? data.available
             : Math.min(data.available, data.dailyRemaining);
-        setMoreLessons(today > 0);
-      })
-      .catch(() => {
-        if (!cancel) toast(t("mojimori.study.saveFailed"));
-      });
+        setMoreLessons(today > 0 || data.items.length > 0);
+      } catch {
+        if (current) toast(t("mojimori.study.saveFailed"));
+      }
+    })();
     return () => {
-      cancel = true;
+      current = false;
     };
-  }, [phase, tasks.length, order, studyFlush, t, queryClient]);
+  }, [phase, tasks.length, order?.length, studyFlush, t, queryClient]);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -625,6 +639,15 @@ export function MojiMoriLessonSession({
   if (phase === "quiz" && !task && order) {
     const records = lessonRecordsFromAnswers(answers.current);
     const stats = lessonQuizStats(order, answers.current);
+    const snap = lessonSnap.current;
+    const remainingAvailable = snap ? Math.max(0, snap.available - order.length) : 0;
+    const remainingToday =
+      snap == null
+        ? null
+        : snap.dailyRemaining == null
+          ? remainingAvailable
+          : Math.min(remainingAvailable, Math.max(0, snap.dailyRemaining - order.length));
+    const predictedMore = remainingToday == null ? null : remainingToday > 0;
     return (
       <div className="mm-quiz-page">
         <ReviewCompletePanel
@@ -635,7 +658,7 @@ export function MojiMoriLessonSession({
           percent={stats.percent}
           onHome={finishLesson}
           onContinue={onContinue ? continueLesson : undefined}
-          canContinue={moreLessons === true}
+          canContinue={moreLessons ?? predictedMore ?? false}
           title={t("mojimori.study.lessonsDone")}
         />
       </div>
