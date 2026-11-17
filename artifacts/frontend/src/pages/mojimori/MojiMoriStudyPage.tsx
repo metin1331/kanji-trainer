@@ -11,16 +11,17 @@ export function MojiMoriLessonPage() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const [run, setRun] = useState(0);
+  const [fresh, setFresh] = useState(false);
   return (
     <MojiMoriLayout showHeader={false}>
       <MojiMoriLessonSession
         key={run}
-        ids={ids}
+        ids={fresh ? undefined : ids}
         onContinue={() => {
+          setFresh(true);
           if (ids?.length) setLocation("/mojimori/lessons");
-          void queryClient
-            .invalidateQueries({ queryKey: ["mojimori", "lessons"] })
-            .finally(() => setRun((value) => value + 1));
+          queryClient.removeQueries({ queryKey: ["mojimori", "lessons"] });
+          setRun((value) => value + 1);
         }}
       />
     </MojiMoriLayout>
@@ -35,9 +36,8 @@ export function MojiMoriReviewPage() {
       key={run}
       onContinue={() => {
         clearReviewBoot();
-        void queryClient
-          .invalidateQueries({ queryKey: ["mojimori", "reviews"] })
-          .finally(() => setRun((value) => value + 1));
+        queryClient.removeQueries({ queryKey: ["mojimori", "reviews"] });
+        setRun((value) => value + 1);
       }}
     />
   );

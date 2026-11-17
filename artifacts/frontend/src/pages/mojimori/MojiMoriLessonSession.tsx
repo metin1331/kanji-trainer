@@ -532,7 +532,8 @@ export function MojiMoriLessonSession({
 
   function continueLesson() {
     if (!onContinue) return;
-    void studyFlush.flush().finally(() => onContinue());
+    void studyFlush.flush().catch(() => toast(t("mojimori.study.saveFailed")));
+    onContinue();
   }
 
   const actions = useRef({

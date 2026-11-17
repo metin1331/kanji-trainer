@@ -355,7 +355,7 @@ export function useStudyFlush(kind: "lesson" | "review" | "extra") {
           pending.current = [...items.slice(applied), ...pending.current];
           throw failed;
         }
-        await queryClient.invalidateQueries({ queryKey: ["mojimori"] });
+        void queryClient.invalidateQueries({ queryKey: ["mojimori"] });
       })();
       flushing.current = run.finally(() => {
         flushing.current = null;

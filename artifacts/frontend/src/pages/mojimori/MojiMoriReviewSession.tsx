@@ -1319,7 +1319,8 @@ export function MojiMoriReviewSession({
   function continueSession() {
     if (!onContinue) return;
     const flush = source === "review" ? flushReviewOutbox() : studyFlush.flush();
-    void flush.finally(() => onContinue());
+    void flush.catch(() => toast(t("mojimori.study.saveFailed")));
+    onContinue();
   }
 
   function finishHome() {
