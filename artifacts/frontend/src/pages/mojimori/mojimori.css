@@ -79,6 +79,7 @@
   --color-nav-inset: rgba(255, 255, 255, 0.95);
   --color-nav-shadow: rgba(63, 81, 181, 0.12);
   --color-chip: rgba(255, 255, 255, 0.72);
+  --color-settings-bg: rgba(255, 255, 255);
   --color-chip-hover: rgba(255, 255, 255, 0.88);
   --color-tile-text: #666;
   --color-surface: rgba(255, 255, 255, 0.9);
@@ -144,6 +145,7 @@
   --color-nav-shadow: rgba(0, 0, 0, 0.35);
   --color-chip: rgba(22, 28, 42, 0.99);
   --color-chip-hover: rgba(32, 40, 58, 0.9);
+  --color-settings-bg: rgba(22, 28, 42);
   --color-tile-text: #fdfefe;
   --color-surface: rgba(20, 26, 40, 0.9);
   --color-search-bg: rgba(18, 22, 34, 0.92);
@@ -2483,7 +2485,7 @@ button.forecast-row {
   list-style: none;
   border: 1px solid var(--color-line);
   border-radius: 8px;
-  background: var(--color-chip);
+  background: var(--color-settings-bg);
   box-shadow:
     inset 0 1px 0 var(--glass-shadow-highlight),
     0 12px 32px var(--glass-shadow-primary);
@@ -5077,6 +5079,139 @@ html:has(.review-complete) .moji-route-bar {
 
   .mm-lesson__arrow {
     width: 2rem;
+  }
+}
+
+a.moji-subject-link {
+  color: inherit;
+  font: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.mm-band-select {
+  display: none;
+  position: relative;
+  min-width: 18rem;
+}
+
+.mm-band-select__control {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+  min-height: 2.4rem;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  background: var(--color-surface);
+  padding: 0.35rem 0.35rem 0.35rem 0.75rem;
+  font: inherit;
+  font-size: 0.875rem;
+  line-height: 1.3;
+  text-align: left;
+  cursor: pointer;
+}
+
+.mm-band-select.is-open .mm-band-select__control {
+  border-bottom-right-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.mm-band-select__arrow {
+  position: relative;
+  flex: 0 0 1.4rem;
+  align-self: stretch;
+  border-left: 1px solid #aaa;
+}
+
+.mm-band-select__arrow::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  margin-top: -2px;
+  margin-left: -4px;
+  border-color: #888 transparent transparent transparent;
+  border-style: solid;
+  border-width: 5px 4px 0 4px;
+}
+
+.mm-band-select.is-open .mm-band-select__arrow::before {
+  margin-top: -4px;
+  border-color: transparent transparent #888 transparent;
+  border-width: 0 4px 5px 4px;
+}
+
+.mm-band-select__drop {
+  position: absolute;
+  z-index: 40;
+  top: 100%;
+  right: 0;
+  left: 0;
+  margin: -2px 0 0;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+  max-height: 14rem;
+  border: 1px solid #aaa;
+  border-radius: 0 0 8px 8px;
+  background: #fff;
+  color: #111;
+}
+
+.mm-band-select__option {
+  display: block;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 6px;
+  color: inherit;
+  font: inherit;
+  font-size: 0.875rem;
+  line-height: 1.35;
+  text-align: left;
+  cursor: pointer;
+}
+
+.mm-band-select__option.is-selected {
+  background: #ddd;
+}
+
+.mm-band-select__option.is-highlighted,
+.mm-band-select__option:hover {
+  background: #5897fb;
+  color: #fff;
+}
+
+.dark .mm-band-select__drop {
+  border-color: #6b7280;
+  background: #1c2333;
+  color: #e7eef8;
+}
+
+.dark .mm-band-select__option.is-selected {
+  background: #2a3142;
+  color: #e7eef8;
+}
+
+.dark .mm-band-select__option.is-highlighted,
+.dark .mm-band-select__option:hover {
+  background: #5897fb;
+  color: #fff;
+}
+
+.dark .mm-band-select__arrow {
+  border-left-color: #6b7280;
+}
+
+@media (min-width: 640px) {
+  .mm-band-select__native {
+    display: none;
+  }
+
+  .mm-band-select {
+    display: block;
   }
 }
 

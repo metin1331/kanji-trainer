@@ -1,3 +1,4 @@
+import type { MouseEvent, ReactNode } from "react";
 import { useLocation } from "wouter";
 import { useTranslation } from "../../i18n/I18nProvider";
 import {
@@ -24,6 +25,40 @@ function TileCaption({ subject }: { subject: MojiMoriSubjectSummary }) {
         <span className="moji-tile__meaning">{subject.primaryMeaning}</span>
       ) : null}
     </>
+  );
+}
+
+function SubjectLink({
+  subject,
+  className,
+  onOpen,
+  children,
+}: {
+  subject: MojiMoriSubjectSummary;
+  className?: string;
+  onOpen?: (subject: MojiMoriSubjectSummary) => void;
+  children: ReactNode;
+}) {
+  const [, navigate] = useLocation();
+  const href = mojiMoriSubjectHref(subject);
+  function open(event: MouseEvent<HTMLAnchorElement>) {
+    if (
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey ||
+      event.button !== 0
+    ) {
+      return;
+    }
+    event.preventDefault();
+    if (onOpen) onOpen(subject);
+    else navigate(href);
+  }
+  return (
+    <a href={href} className={`moji-subject-link${className ? ` ${className}` : ""}`} onClick={open}>
+      {children}
+    </a>
   );
 }
 
@@ -105,15 +140,14 @@ export function SubjectTile({
   compact?: boolean;
   onOpen?: (subject: MojiMoriSubjectSummary) => void;
 }) {
-  const [, navigate] = useLocation();
   return (
-    <button
-      type="button"
-      onClick={() => (onOpen ? onOpen(subject) : navigate(mojiMoriSubjectHref(subject)))}
+    <SubjectLink
+      subject={subject}
+      onOpen={onOpen}
       className="flex flex-col items-center gap-1 rounded-md px-1 py-1 text-center"
     >
       <ProgressSquare subject={subject} size={compact ? "sm" : "md"} />
-    </button>
+    </SubjectLink>
   );
 }
 
@@ -150,13 +184,8 @@ export function ComposeSubjectItem({
   /** When false, only the meaning line is shown (e.g. radical rows in kanji composition). */
   reading?: boolean;
 }) {
-  const [, navigate] = useLocation();
   return (
-    <button
-      type="button"
-      className="mm-compose__item"
-      onClick={() => (onOpen ? onOpen(subject) : navigate(mojiMoriSubjectHref(subject)))}
-    >
+    <SubjectLink subject={subject} onOpen={onOpen} className="mm-compose__item">
       <span className="mm-compose__glyph" aria-hidden="true">
         <ProgressSquare subject={subject} size="sm" />
       </span>
@@ -166,7 +195,7 @@ export function ComposeSubjectItem({
         ) : null}
         <small>{subject.primaryMeaning}</small>
       </span>
-    </button>
+    </SubjectLink>
   );
 }
 
@@ -183,14 +212,11 @@ export function LevelSubjectCard({
   className?: string;
   onOpen?: (subject: MojiMoriSubjectSummary) => void;
 }) {
-  const [, navigate] = useLocation();
   return (
-    <button
-      type="button"
-      onClick={() => (onOpen ? onOpen(subject) : navigate(mojiMoriSubjectHref(subject)))}
-      className={`flex w-max max-w-full flex-col items-center ${
-        className ? `${className}` : ""
-      }`}
+    <SubjectLink
+      subject={subject}
+      onOpen={onOpen}
+      className={`flex w-max max-w-full flex-col items-center${className ? ` ${className}` : ""}`}
     >
       <ProgressSquare subject={subject} size="sm" showBar={showBar} />
       {caption ? (
@@ -198,7 +224,7 @@ export function LevelSubjectCard({
           <TileCaption subject={subject} />
         </span>
       ) : null}
-    </button>
+    </SubjectLink>
   );
 }
 
@@ -216,7 +242,6 @@ export function SeeAllGrid({
   subjects: MojiMoriSubjectSummary[];
   grouped?: boolean;
 }) {
-  const [, navigate] = useLocation();
   const ordered = grouped
     ? subjects
         .map((subject, index) => ({
@@ -236,14 +261,9 @@ export function SeeAllGrid({
   ) : (
     <div className="flex flex-wrap gap-x-3.5 gap-y-1">
       {ordered.map((subject) => (
-        <button
-          key={subject.id}
-          type="button"
-          onClick={() => navigate(mojiMoriSubjectHref(subject))}
-          className="flex shrink-0"
-        >
+        <SubjectLink key={subject.id} subject={subject} className="flex shrink-0">
           <ProgressSquare subject={subject} showBar />
-        </button>
+        </SubjectLink>
       ))}
     </div>
   );

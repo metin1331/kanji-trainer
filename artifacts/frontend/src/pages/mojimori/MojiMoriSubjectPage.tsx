@@ -250,7 +250,7 @@ export function MojiMoriSubjectPage() {
 
   return (
     <MojiMoriLayout>
-      <div className="mb-4 flex items-center justify-between text-base text-[#777]">
+      <div className="mb-4 flex items-center justify-between text-base text-[var(--color-text-secondary)]">
         <div>
           {t("mojimori.levelHeading", { level: data.level })} ·{" "}
           {t(`mojimori.types.${data.objectType}`)}
