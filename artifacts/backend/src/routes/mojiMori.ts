@@ -1,13 +1,14 @@
 import { Router } from "express";
 import {
   db,
+  mojiMoriBookmarksTable,
   mojiMoriSubjectsTable,
   mojiMoriObjectTypes,
   type MojiMoriObjectType,
   type MojiMoriMeaning,
   type MojiMoriReading,
 } from "@workspace/db";
-import { and, asc, eq, gte, ilike, inArray, lte, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, ilike, inArray, lte, or, sql } from "drizzle-orm";
 import { getUserId, requireAdmin } from "../middleware/auth";
 import {
   getMojiMoriDashboard,
@@ -156,6 +157,64 @@ async function loadSummaries(userId: number, ids: number[]) {
   const byId = new Map(summaries.map((row) => [row.id, row]));
   return unique.map((id) => byId.get(id)).filter((row) => row != null);
 }
+
+router.get("/mojimori/bookmarks", async (req, res, next) => {
+  try {
+    const userId = getUserId(req);
+    const marks = await db
+      .select({ subjectId: mojiMoriBookmarksTable.subjectId })
+      .from(mojiMoriBookmarksTable)
+      .where(eq(mojiMoriBookmarksTable.userId, userId))
+      .orderBy(desc(mojiMoriBookmarksTable.createdAt), desc(mojiMoriBookmarksTable.subjectId));
+    const subjects = await loadSummaries(
+      userId,
+      marks.map((mark) => mark.subjectId),
+    );
+    res.json({ subjects });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/mojimori/bookmarks/:id", async (req, res, next) => {
+  try {
+    const id = parsePositiveInt(req.params.id);
+    const bookmarked = req.body?.bookmarked;
+    if (!id || typeof bookmarked !== "boolean") {
+      res.status(400).json({ error: "Invalid bookmark" });
+      return;
+    }
+    const userId = getUserId(req);
+    const [subject] = await db
+      .select({ id: mojiMoriSubjectsTable.id })
+      .from(mojiMoriSubjectsTable)
+      .where(eq(mojiMoriSubjectsTable.id, id))
+      .limit(1);
+    if (!subject) {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
+    if (bookmarked) {
+      await db
+        .insert(mojiMoriBookmarksTable)
+        .values({ userId, subjectId: id })
+        .onConflictDoNothing();
+    } else {
+      await db
+        .delete(mojiMoriBookmarksTable)
+        .where(
+          and(
+            eq(mojiMoriBookmarksTable.userId, userId),
+            eq(mojiMoriBookmarksTable.subjectId, id),
+          ),
+        );
+    }
+    const [summary] = bookmarked ? await loadSummaries(userId, [id]) : [];
+    res.json({ bookmarked, subject: summary ?? null });
+  } catch (err) {
+    next(err);
+  }
+});
 
 router.get("/mojimori/dashboard", async (req, res, next) => {
   try {

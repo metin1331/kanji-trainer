@@ -490,6 +490,80 @@ export function useMojiMoriNotes() {
   });
 }
 
+export const mojiMoriBookmarksKey = ["mojimori", "bookmarks"] as const;
+
+export function mojiMoriBookmarksQuery() {
+  return {
+    queryKey: mojiMoriBookmarksKey,
+    queryFn: async (): Promise<MojiMoriSubjectSummary[]> => {
+      const res = await apiFetch("/api/mojimori/bookmarks");
+      const data = await parseJson<{ subjects: MojiMoriSubjectSummary[] }>(res);
+      return data.subjects;
+    },
+    staleTime: 20_000,
+  };
+}
+
+export function useMojiMoriBookmarks() {
+  return useQuery(mojiMoriBookmarksQuery());
+}
+
+function applyBookmark(
+  list: MojiMoriSubjectSummary[],
+  id: number,
+  bookmarked: boolean,
+  subject: MojiMoriSubjectSummary | null,
+) {
+  const rest = list.filter((item) => item.id !== id);
+  if (!bookmarked || !subject) return rest;
+  return [subject, ...rest];
+}
+
+export function useToggleMojiMoriBookmark() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: {
+      id: number;
+      bookmarked: boolean;
+      preview?: MojiMoriSubjectSummary;
+    }) => {
+      const res = await apiFetch(`/api/mojimori/bookmarks/${body.id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bookmarked: body.bookmarked }),
+      });
+      return parseJson<{ bookmarked: boolean; subject: MojiMoriSubjectSummary | null }>(res);
+    },
+    onMutate: async (body) => {
+      await queryClient.cancelQueries({ queryKey: mojiMoriBookmarksKey });
+      const previous = queryClient.getQueryData<MojiMoriSubjectSummary[]>(mojiMoriBookmarksKey);
+      if (previous) {
+        queryClient.setQueryData(
+          mojiMoriBookmarksKey,
+          applyBookmark(previous, body.id, body.bookmarked, body.preview ?? null),
+        );
+      }
+      return { previous };
+    },
+    onError: (_err, _body, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(mojiMoriBookmarksKey, context.previous);
+      }
+    },
+    onSuccess: (data, body) => {
+      const current = queryClient.getQueryData<MojiMoriSubjectSummary[]>(mojiMoriBookmarksKey);
+      if (!current) {
+        void queryClient.invalidateQueries({ queryKey: mojiMoriBookmarksKey });
+        return;
+      }
+      queryClient.setQueryData(
+        mojiMoriBookmarksKey,
+        applyBookmark(current, body.id, data.bookmarked, data.subject ?? body.preview ?? null),
+      );
+    },
+  });
+}
+
 export function useUnburnMojiMori() {
   const queryClient = useQueryClient();
   return useMutation({

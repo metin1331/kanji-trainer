@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { toast } from "@/components/smoothui/toast";
+import { BookmarkButton, studyCardPreview } from "./BookmarkButton";
 import { MojiMoriLoading } from "./MojiMoriLoading";
 import {
   useMojiMoriCustom,
@@ -1561,6 +1562,11 @@ export function MojiMoriReviewSession({
                   {checkpointSaved ? <SaveOff size={18} /> : <Save size={18} />}
                 </button>
               ) : null}
+              <BookmarkButton
+                subjectId={card.id}
+                preview={studyCardPreview(card)}
+                className="mm-quiz__home"
+              />
             </div>
             <div className="mm-quiz__stats">
               <span title={t("mojimori.study.percentTitle")}>

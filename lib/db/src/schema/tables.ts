@@ -446,6 +446,26 @@ export const mojiMoriUsersTable = pgTable("moji_mori_users", {
   drawingCardsLast: boolean("drawing_cards_last").notNull().default(false),
 });
 
+/** Per-user subject bookmarks. One row per user and card. */
+export const mojiMoriBookmarksTable = pgTable(
+  "moji_mori_bookmarks",
+  {
+    userId: integer("user_id")
+      .notNull()
+      .references(() => usersTable.id, { onDelete: "cascade" }),
+    subjectId: integer("subject_id")
+      .notNull()
+      .references(() => mojiMoriSubjectsTable.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.userId, t.subjectId] }),
+    index("moji_mori_bookmarks_user_created_idx").on(t.userId, t.createdAt),
+  ],
+);
+
 /** Per-user SRS progress. Absent row means the item has not been started. */
 export const mojiMoriProgressTable = pgTable(
   "moji_mori_progress",

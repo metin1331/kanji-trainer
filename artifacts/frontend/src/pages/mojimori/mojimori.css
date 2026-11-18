@@ -5228,6 +5228,22 @@ a.moji-subject-link {
   gap: 1rem 1.75rem;
 }
 
+.subject-hero__bookmark {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  margin-left: auto;
+  border: 1px solid var(--color-nav-border);
+  border-radius: 999px;
+  background: var(--color-surface);
+  color: var(--color-ink);
+  padding: 0;
+  cursor: pointer;
+}
+
 .subject-tools {
   display: flex;
   flex-direction: column;

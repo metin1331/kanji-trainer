@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, Info } from "lucide-react";
 import { useLocation } from "wouter";
 import { CollapsiblePanel, CollapsibleRoot } from "@/components/smoothui/collapsible";
 import Textarea from "@/components/smoothui/textarea";
+import { BookmarkButton } from "./BookmarkButton";
 import { MojiMoriLoading } from "./MojiMoriLoading";
 import { useAuth } from "../../auth/AuthProvider";
 import { useTranslation } from "../../i18n/I18nProvider";
@@ -291,6 +292,7 @@ export function MojiMoriSubjectPage() {
           <div className="subject-hero__copy">
             <h1 className="subject-hero__title">{data.primaryMeaning}</h1>
           </div>
+          <BookmarkButton subjectId={data.id} preview={data} className="subject-hero__bookmark" />
         </div>
 
         {jumps.length > 0 || isAdmin ? (

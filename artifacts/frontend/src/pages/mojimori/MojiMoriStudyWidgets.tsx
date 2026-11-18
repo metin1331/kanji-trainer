@@ -15,6 +15,7 @@ import type {
 } from "../../lib/mojiMori";
 import { TodaysLessonsWidget, TypeMix } from "./TodaysLessonsWidget";
 import { LevelSubjectCard } from "./SubjectTile";
+import { BookmarkPanel } from "./BookmarkPanel";
 import { CustomStudyModal } from "./CustomStudyModal";
 
 function heatLevel(count: number) {
@@ -69,6 +70,7 @@ export function MojiMoriStudyWidgets({
         </div>
       </section>
 
+      <section className="grid items-stretch gap-3 sm:grid-cols-2">
       <section className="glass-panel p-5">
         <h2 className="mb-3 text-lg font-semibold sm:text-base">
           {t("mojimori.study.extraTitle")}
@@ -110,6 +112,8 @@ export function MojiMoriStudyWidgets({
             </div>
           </div>
         ) : null}
+      </section>
+      <BookmarkPanel />
       </section>
 
       <ForecastPanel forecast={study.forecast} />

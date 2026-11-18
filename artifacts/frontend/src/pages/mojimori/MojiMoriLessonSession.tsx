@@ -12,6 +12,7 @@ import {
   Plus,
   Volume2,
 } from "lucide-react";
+import { BookmarkButton, studyCardPreview } from "./BookmarkButton";
 import { MojiMoriLoading } from "./MojiMoriLoading";
 import { useTranslation } from "../../i18n/I18nProvider";
 import {
@@ -698,9 +699,16 @@ export function MojiMoriLessonSession({
       ) : null}
       <header className="mm-quiz__stage mm-lesson__stage" data-kind={shown.objectType}>
         <div className="mm-lesson__bar">
-          <Link href="/mojimori" className="mm-quiz__home" title={t("mojimori.study.returnHome")} onClick={goHome}>
-            <House size={18} />
-          </Link>
+          <div className="mm-quiz__stage-tools">
+            <Link href="/mojimori" className="mm-quiz__home" title={t("mojimori.study.returnHome")} onClick={goHome}>
+              <House size={18} />
+            </Link>
+            <BookmarkButton
+              subjectId={shown.id}
+              preview={studyCardPreview(shown)}
+              className="mm-quiz__home"
+            />
+          </div>
           <div className="mm-lesson__counts">
             <span title={t("mojimori.study.remainingRadical")}>
               R <Inbox size={14} /> {tally.radical}
