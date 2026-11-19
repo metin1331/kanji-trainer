@@ -17,8 +17,9 @@ import {
   progressView,
   type MojiMoriProgressView,
 } from "../lib/mojiMoriProgress";
-import { studySnapshot, lessonPicker, lessonQueue, reviewQueue, reviewCards, extraQueue, customQueue, parseCustomStudyConfig, gradeStudyItem, gradeStudyBatch, acceptReviewPrompt, readReviewResume, saveReviewCheckpoint, deleteReviewCheckpoint, dropCheckpointTask, checkStudyAnswer, checkWordAnswer, updateStudySettings, studySettings, saveSubjectNotes, unburnSubject, subjectAnswerStats, type ExtraMode, type StudyKind } from "../lib/mojiMoriStudy";
+import { studySnapshot, lessonPicker, lessonQueue, reviewQueue, reviewCards, extraQueue, customQueue, parseCustomStudyConfig, gradeStudyItem, gradeStudyBatch, acceptReviewPrompt, undoReviewMistake, readReviewResume, saveReviewCheckpoint, deleteReviewCheckpoint, dropCheckpointTask, checkStudyAnswer, checkWordAnswer, updateStudySettings, studySettings, saveSubjectNotes, unburnSubject, subjectAnswerStats, type ExtraMode, type StudyKind } from "../lib/mojiMoriStudy";
 import { isReviewPrompt } from "../lib/mojiMoriReviewProgress";
+import { fuzzySearchRank, hasCloseSearch, searchNeedles } from "../lib/mojiMoriSearch";
 import { COMPLETED_STAGE } from "../lib/mojiMoriUnlock";
 
 const router = Router();
@@ -276,29 +277,41 @@ router.get("/mojimori/subjects", async (req, res, next) => {
     if (levelMin) filters.push(gte(mojiMoriSubjectsTable.level, levelMin));
     if (levelMax) filters.push(lte(mojiMoriSubjectsTable.level, levelMax));
     if (q) {
-      const pattern = `%${escapeLike(q)}%`;
-      filters.push(
-        or(
+      const clauses = searchNeedles(q).flatMap((needle) => {
+        const pattern = `%${escapeLike(needle)}%`;
+        return [
           ilike(mojiMoriSubjectsTable.characters, pattern),
           ilike(mojiMoriSubjectsTable.slug, pattern),
           sql`${mojiMoriSubjectsTable.meanings}::text ilike ${pattern}`,
           sql`${mojiMoriSubjectsTable.readings}::text ilike ${pattern}`,
-        ),
-      );
+        ];
+      });
+      const matched = or(...clauses);
+      if (matched) filters.push(matched);
     }
 
     const limit = q ? MAX_SEARCH : MAX_LIST;
-    const rows = await db
+    const order = [
+      asc(mojiMoriSubjectsTable.level),
+      asc(mojiMoriSubjectsTable.objectType),
+      asc(mojiMoriSubjectsTable.lessonPosition),
+      asc(mojiMoriSubjectsTable.id),
+    ] as const;
+    let rows = await db
       .select(summaryColumns)
       .from(mojiMoriSubjectsTable)
       .where(filters.length ? and(...filters) : undefined)
-      .orderBy(
-        asc(mojiMoriSubjectsTable.level),
-        asc(mojiMoriSubjectsTable.objectType),
-        asc(mojiMoriSubjectsTable.lessonPosition),
-        asc(mojiMoriSubjectsTable.id),
-      )
+      .orderBy(...order)
       .limit(limit);
+    if (q && hasCloseSearch(q, rows.length)) {
+      const scope = filters.slice(0, -1);
+      const pool = await db
+        .select(summaryColumns)
+        .from(mojiMoriSubjectsTable)
+        .where(scope.length ? and(...scope) : undefined);
+      const extra = fuzzySearchRank(pool, q, new Set(rows.map((row) => row.id)), rows.length);
+      rows = [...rows, ...extra].slice(0, limit);
+    }
 
     res.json({
       subjects: await summarize(getUserId(req), rows),
@@ -460,7 +473,13 @@ router.get("/mojimori/study/reviews/cards", async (req, res, next) => {
 router.get("/mojimori/study/extra", async (req, res, next) => {
   try {
     const mode = req.query.mode;
-    if (mode !== "recent-lessons" && mode !== "recent-mistakes" && mode !== "cooked") {
+    if (
+      mode !== "recent-lessons" &&
+      mode !== "recent-mistakes" &&
+      mode !== "cooked" &&
+      mode !== "bookmarks" &&
+      mode !== "leeches"
+    ) {
       res.status(400).json({ error: "Invalid extra study mode" });
       return;
     }
@@ -526,6 +545,23 @@ router.post("/mojimori/study/prompt", async (req, res, next) => {
       }),
     );
   } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/mojimori/study/reviews/undo", async (req, res, next) => {
+  try {
+    const subjectId = parsePositiveInt(req.body?.subjectId);
+    if (!subjectId) {
+      res.status(400).json({ error: "Invalid subject" });
+      return;
+    }
+    res.json(await undoReviewMistake(getUserId(req), subjectId));
+  } catch (err) {
+    if (err instanceof Error && err.message === "Nothing to undo") {
+      res.status(409).json({ error: err.message });
+      return;
+    }
     next(err);
   }
 });

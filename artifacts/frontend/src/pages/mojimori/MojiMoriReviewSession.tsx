@@ -79,6 +79,7 @@ import { currentReviewBoot, releaseReviewBoot, retainReviewBoot } from "./review
 import { KanjiReview, KanjiStrokeQuiz, WordReveal } from "./KanjiStrokeQuiz";
 import { StrokeGlyphTrigger, StrokeSubjectTrigger } from "./MojiStrokeModal";
 import {
+  lapseKey,
   nextReviewQueue,
   rememberLapse,
   shuffleLapses,
@@ -101,6 +102,7 @@ import {
   dropReviewCheckpointTask,
   enqueueReviewPrompt,
   flushReviewOutbox,
+  undoPersistedReview,
   onReviewPromptPersisted,
   pendingReviewPrompts,
   reviewTaskKey,
@@ -496,6 +498,7 @@ export function MojiMoriReviewSession({
   const lapses = useRef<LapseTask[]>([]);
   const lapseSeen = useRef(new Set<string>());
   const [lapsesOn, setLapsesOn] = useState(false);
+  const [undoing, setUndoing] = useState(false);
   const [lapseTotal, setLapseTotal] = useState(0);
   const [checkpointSaved, setCheckpointSaved] = useState(false);
   const [moreReviews, setMoreReviews] = useState<boolean | null>(null);
@@ -892,6 +895,44 @@ export function MojiMoriReviewSession({
   function noteLapse(task: Task) {
     if (source !== "review") return;
     rememberLapse(lapseSeen.current, lapses.current, task, inLapses.current);
+  }
+
+  async function undoWrong() {
+    if (!card || source !== "review" || !lapsesOn || undoing) return;
+    setUndoing(true);
+    try {
+      await flushReviewOutbox();
+      await undoPersistedReview(card.id);
+    } catch {
+      toast(t("mojimori.study.undoFailed"));
+      setUndoing(false);
+      return;
+    }
+    const nextRecords = { ...recordsRef.current };
+    delete nextRecords[card.id];
+    recordsRef.current = nextRecords;
+    setRecords(nextRecords);
+    setRecent((ids) => ids.filter((id) => id !== card.id));
+    for (const prompt of card.prompts) {
+      lapseSeen.current.delete(lapseKey({ subjectId: card.id, prompt }));
+    }
+    lapses.current = queue
+      .filter((task) => task.subjectId !== card.id)
+      .map((task) => ({ subjectId: task.subjectId, prompt: task.prompt }));
+    inLapses.current = false;
+    setLapsesOn(false);
+    setWrapUp(false);
+    clearCard();
+    setQueue(
+      card.prompts.map((prompt) => ({
+        subjectId: card.id,
+        prompt,
+        retry: false,
+      })),
+    );
+    void queryClient.invalidateQueries({ queryKey: ["mojimori", "dashboard"] });
+    void queryClient.invalidateQueries({ queryKey: ["mojimori", "subject", card.id] });
+    setUndoing(false);
   }
 
   function persistReviewPrompt(
@@ -1567,6 +1608,16 @@ export function MojiMoriReviewSession({
                 preview={studyCardPreview(card)}
                 className="mm-quiz__home"
               />
+              {source === "review" && lapsesOn ? (
+                <button
+                  type="button"
+                  className="mm-quiz__home mm-quiz__home--text"
+                  disabled={undoing}
+                  onClick={() => void undoWrong()}
+                >
+                  {t("mojimori.study.undoWrong")}
+                </button>
+              ) : null}
             </div>
             <div className="mm-quiz__stats">
               <span title={t("mojimori.study.percentTitle")}>
@@ -1591,9 +1642,13 @@ export function MojiMoriReviewSession({
               <p className="mm-quiz__mode">
                 {extraMode === "recent-mistakes"
                   ? t("mojimori.study.extraRecentMistakes")
-                  : extraMode === "cooked"
-                    ? t("mojimori.study.extraLegendary")
-                    : t("mojimori.study.extraRecentLessons")}
+                  : extraMode === "bookmarks"
+                    ? t("mojimori.study.extraBookmarks")
+                    : extraMode === "leeches"
+                      ? t("mojimori.study.extraLeeches")
+                      : extraMode === "cooked"
+                        ? t("mojimori.study.extraLegendary")
+                        : t("mojimori.study.extraRecentLessons")}
               </p>
             ) : null}
             <Glyph

@@ -26,6 +26,188 @@ function heatLevel(count: number) {
   return 4;
 }
 
+function shiftDays(date: Date, days: number) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function levelSpan(levels: number[]) {
+  if (levels.length === 0) return "";
+  const contiguous = levels.every(
+    (value, index) => index === 0 || value === (levels[index - 1] ?? 0) + 1,
+  );
+  if (levels.length > 1 && contiguous) {
+    return `${levels[0]}–${levels[levels.length - 1]}`;
+  }
+  return levels.join(", ");
+}
+
+function WeekReport({
+  week,
+}: {
+  week?: MojiMoriStudySnapshot["week"];
+}) {
+  const { t } = useTranslation();
+  const current = week ?? { newCards: 0, reviews: 0, level: 1, levels: [] };
+  const studied = levelSpan(current.levels);
+  const sameLevel =
+    current.levels.length === 0 ||
+    (current.levels.length === 1 && current.levels[0] === current.level);
+  return (
+    <section className="glass-panel p-5">
+      <h2 className="text-lg font-semibold sm:text-base">
+        {t("mojimori.study.weekTitle")}
+      </h2>
+      <dl className="moji-week">
+        <div>
+          <dt>{t("mojimori.study.weekNew")}</dt>
+          <dd>{current.newCards}</dd>
+        </div>
+        <div>
+          <dt>{t("mojimori.study.weekReviews")}</dt>
+          <dd>{current.reviews}</dd>
+        </div>
+        <div>
+          <dt>{t("mojimori.study.weekLevel")}</dt>
+          <dd>{current.level}</dd>
+        </div>
+      </dl>
+      {studied && !sameLevel ? (
+        <p className="mt-3 text-sm text-[var(--color-muted)]">
+          {t("mojimori.study.weekLevels", { levels: studied })}
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
+function Heatmap({
+  cells,
+  lockedDate,
+  onLock,
+}: {
+  cells: { date: string; count: number }[];
+  lockedDate: string | null;
+  onLock: (date: string | null) => void;
+}) {
+  const { t, locale } = useTranslation();
+  const tag = localeTag(locale);
+  const weeks = useMemo(() => {
+    const rows: { date: string; count: number; future: boolean }[][] = [];
+    for (let index = 0; index < cells.length; index += 7) {
+      rows.push(
+        cells.slice(index, index + 7).map((cell) => ({
+          ...cell,
+          future: false,
+        })),
+      );
+    }
+    const last = rows[rows.length - 1];
+    if (last && last.length > 0 && last.length < 7) {
+      let cursor = parseDay(last[last.length - 1]?.date ?? "");
+      while (last.length < 7) {
+        cursor = shiftDays(cursor, 1);
+        last.push({ date: dayKey(cursor), count: 0, future: true });
+      }
+    }
+    return rows;
+  }, [cells]);
+  const months = useMemo(() => {
+    let previous = "";
+    return weeks.map((week) => {
+      const first = week.find((cell) => !cell.future);
+      const label = first
+        ? parseDay(first.date).toLocaleDateString(tag, { month: "short" })
+        : "";
+      const show = Boolean(label && label !== previous);
+      if (label) previous = label;
+      return show ? label : "";
+    });
+  }, [weeks, tag]);
+  const weekday = (index: number) => {
+    const monday = new Date(2024, 0, 1 + index);
+    return monday.toLocaleDateString(tag, { weekday: "narrow" });
+  };
+  const today = cells[cells.length - 1]?.date ?? "";
+  const yearTotal = cells.reduce((sum, cell) => sum + cell.count, 0);
+  const selected = cells.find((cell) => cell.date === lockedDate);
+  return (
+    <section className="glass-panel p-5">
+      <div className="mb-3 flex items-baseline justify-between gap-3">
+        <h2 className="text-lg font-semibold sm:text-base">
+          {t("mojimori.study.heatmap")}
+        </h2>
+        <p className="text-sm text-[var(--color-muted)]">
+          {t("mojimori.study.heatTotal", { count: yearTotal })}
+        </p>
+      </div>
+      <div className="overflow-x-auto">
+        <div className="moji-heat-board">
+          <div className="moji-heat-months" aria-hidden="true">
+            {months.map((month, index) => (
+              <span key={index}>{month}</span>
+            ))}
+          </div>
+          <div className="moji-heat-days" aria-hidden="true">
+            {[0, 2, 4].map((index) => (
+              <span key={index} style={{ gridRow: index + 1 }}>
+                {weekday(index)}
+              </span>
+            ))}
+          </div>
+          <div className="moji-heat">
+            {weeks.flatMap((week) =>
+              week.map((cell) =>
+                cell.future ? (
+                  <span key={cell.date} className="moji-heat__cell is-future" />
+                ) : (
+                  <button
+                    key={cell.date}
+                    type="button"
+                    className={`moji-heat__cell${cell.date === today ? " is-today" : ""}${cell.date === lockedDate ? " is-locked" : ""}`}
+                    data-level={heatLevel(cell.count)}
+                    aria-pressed={cell.date === lockedDate}
+                    aria-label={t("mojimori.study.heatDay", {
+                      date: parseDay(cell.date).toLocaleDateString(tag, {
+                        day: "numeric",
+                        month: "long",
+                      }),
+                      count: cell.count,
+                    })}
+                    onClick={() => onLock(cell.date === lockedDate ? null : cell.date)}
+                  />
+                ),
+              ),
+            )}
+          </div>
+        </div>
+      </div>
+      <div className="moji-heat-foot">
+        <p>
+          {selected
+            ? t("mojimori.study.heatDay", {
+                date: parseDay(selected.date).toLocaleDateString(tag, {
+                  day: "numeric",
+                  month: "long",
+                  year: "numeric",
+                }),
+                count: selected.count,
+              })
+            : null}
+        </p>
+        <div className="moji-heat-legend" aria-hidden="true">
+          <span>{t("mojimori.study.heatLess")}</span>
+          {[0, 1, 2, 3, 4].map((level) => (
+            <i key={level} data-level={level} />
+          ))}
+          <span>{t("mojimori.study.heatMore")}</span>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export function MojiMoriStudyWidgets({
   study,
 }: {
@@ -89,6 +271,12 @@ export function MojiMoriStudyWidgets({
               count: study.extra.recentMistakes,
             })}
           </Link>
+          <Link href="/mojimori/extra?mode=bookmarks" className="moji-btn">
+            {t("mojimori.study.bookmarkItems", { count: study.extra.bookmarks })}
+          </Link>
+          <Link href="/mojimori/extra?mode=leeches" className="moji-btn">
+            {t("mojimori.study.leechItems", { count: study.extra.leeches })}
+          </Link>
           <Link href="/mojimori/extra?mode=cooked" className="moji-btn">
             {t("mojimori.study.cookedItems", { count: study.extra.cooked })}
           </Link>
@@ -120,23 +308,27 @@ export function MojiMoriStudyWidgets({
 
       <ReviewStats study={study} />
 
-      <section className="glass-panel p-5">
-        <h2 className="mb-3 text-lg font-semibold sm:text-base">
-          {t("mojimori.study.heatmap")}
-        </h2>
-        <div className="overflow-x-auto">
-          <div className="moji-heat">
-            {study.heatmap.map((cell) => (
-              <i
-                key={cell.date}
-                data-level={heatLevel(cell.count)}
-                title={`${cell.date}: ${cell.count}`}
-                onClick={() => setLockedDate(cell.date)}
-              />
-            ))}
-          </div>
+      <section className="grid items-stretch gap-3 lg:grid-cols-[minmax(0,1fr)_17rem]">
+        <Heatmap
+          cells={study.heatmap}
+          lockedDate={lockedDate}
+          onLock={setLockedDate}
+        />
+        <div className="grid gap-3">
+          <WeekReport week={study.week} />
+          <section className="glass-panel p-5">
+            <h2 className="text-lg font-semibold sm:text-base">
+              {t("mojimori.study.streak")}
+            </h2>
+            <p className="mt-2 text-sm">
+              {t("mojimori.study.streakNow", {
+                current: study.streak.current,
+                best: study.streak.best,
+                days: study.streak.daysStudied,
+              })}
+            </p>
+          </section>
         </div>
-        {lockedDate ? <p className="mt-2 text-sm">{lockedDate}</p> : null}
       </section>
 
       <section className="glass-panel p-5">
@@ -160,18 +352,6 @@ export function MojiMoriStudyWidgets({
         />
       </section>
 
-      <section className="glass-panel p-5">
-        <h2 className="text-lg font-semibold sm:text-base">
-          {t("mojimori.study.streak")}
-        </h2>
-        <p className="mt-2 text-sm">
-          {t("mojimori.study.streakNow", {
-            current: study.streak.current,
-            best: study.streak.best,
-            days: study.streak.daysStudied,
-          })}
-        </p>
-      </section>
     </div>
     {customOpen ? <CustomStudyModal onClose={() => setCustomOpen(false)} /> : null}
     </>

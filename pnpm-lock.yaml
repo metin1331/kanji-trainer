@@ -196,6 +196,9 @@ importers:
       ts-fsrs:
         specifier: ^5.4.1
         version: 5.4.1
+      wanakana:
+        specifier: 5.3.1
+        version: 5.3.1
     devDependencies:
       '@types/cookie-parser':
         specifier: ^1.4.10

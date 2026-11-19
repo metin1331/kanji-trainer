@@ -550,6 +550,34 @@ export const mojiMoriReviewCheckpointsTable = pgTable("moji_mori_review_checkpoi
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+/** State from just before the latest wrong review, so that mistake can be undone. */
+export const mojiMoriReviewUndoTable = pgTable(
+  "moji_mori_review_undo",
+  {
+    userId: integer("user_id")
+      .notNull()
+      .references(() => usersTable.id, { onDelete: "cascade" }),
+    subjectId: integer("subject_id")
+      .notNull()
+      .references(() => mojiMoriSubjectsTable.id, { onDelete: "cascade" }),
+    srsStage: integer("srs_stage").notNull(),
+    availableAt: timestamp("available_at", { withTimezone: true }),
+    incorrectCount: integer("incorrect_count").notNull(),
+    passedAt: timestamp("passed_at", { withTimezone: true }),
+    burnedAt: timestamp("burned_at", { withTimezone: true }),
+    meaningCorrect: integer("meaning_correct").notNull(),
+    meaningIncorrect: integer("meaning_incorrect").notNull(),
+    meaningCurrentStreak: integer("meaning_current_streak").notNull(),
+    meaningMaxStreak: integer("meaning_max_streak").notNull(),
+    readingCorrect: integer("reading_correct").notNull(),
+    readingIncorrect: integer("reading_incorrect").notNull(),
+    readingCurrentStreak: integer("reading_current_streak").notNull(),
+    readingMaxStreak: integer("reading_max_streak").notNull(),
+    gradedAt: timestamp("graded_at", { withTimezone: true }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.subjectId] })],
+);
+
 /** One row per quiz attempt. Dashboard stats read this log. */
 export const mojiMoriReviewsTable = pgTable(
   "moji_mori_reviews",

@@ -240,11 +240,18 @@ export type MojiMoriStudySnapshot = {
     lessonPosition: number;
     srsStage: number;
   }[];
-  extra: { recentLessons: number; recentMistakes: number; cooked: number };
+  extra: {
+    recentLessons: number;
+    recentMistakes: number;
+    cooked: number;
+    bookmarks: number;
+    leeches: number;
+  };
   completed: { key: string; current: number | null; previous: number | null }[];
   accuracy: { key: string; current: number | null; previous: number | null }[];
   reviewDays?: { date: string; count: number; correct: number }[];
   heatmap: { date: string; count: number }[];
+  week: { newCards: number; reviews: number; level: number; levels: number[] };
   lists: {
     cooked: { id: number; characters: string | null; objectType: string }[];
     unlocked: { id: number; characters: string | null; objectType: string }[];

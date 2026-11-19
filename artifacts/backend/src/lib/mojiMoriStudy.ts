@@ -4,7 +4,9 @@ import {
   mojiMoriProgressTable,
   mojiMoriPromptReceiptsTable,
   mojiMoriReviewCheckpointsTable,
+  mojiMoriReviewUndoTable,
   mojiMoriReviewsTable,
+  mojiMoriBookmarksTable,
   mojiMoriSubjectsTable,
   mojiMoriUsersTable,
   type MojiMoriCheckpointTask,
@@ -45,7 +47,9 @@ import {
 } from "./mojiMoriProgress";
 
 export type StudyKind = "lesson" | "review" | "extra";
-export type ExtraMode = "recent-lessons" | "recent-mistakes" | "cooked";
+export type ExtraMode = "recent-lessons" | "recent-mistakes" | "cooked" | "bookmarks" | "leeches";
+
+const LEECH_WRONGS = 3;
 export type ReviewOrder = "shuffled" | "apprentice" | "lower-stage" | "lower-level";
 
 type SubjectRow = typeof mojiMoriSubjectsTable.$inferSelect;
@@ -785,7 +789,71 @@ export async function reviewCards(userId: number, ids: number[]) {
   return { items: await quizCards(ordered) };
 }
 
+function leechFilter(userId: number) {
+  return and(
+    eq(mojiMoriProgressTable.userId, userId),
+    gte(mojiMoriProgressTable.srsStage, 1),
+    lte(mojiMoriProgressTable.srsStage, COMPLETED_STAGE - 1),
+    sql`${mojiMoriProgressTable.meaningIncorrect} + ${mojiMoriProgressTable.readingIncorrect} >= ${LEECH_WRONGS}`,
+  );
+}
+
+function quizSource(
+  row: SubjectRow,
+  stage: number,
+  incorrectCount: number,
+): QuizSource {
+  return {
+    id: row.id,
+    objectType: row.objectType,
+    level: row.level,
+    characters: row.characters,
+    characterImages: row.characterImages,
+    pronunciationAudios: row.pronunciationAudios,
+    srsStage: stage,
+    componentSubjectIds: row.componentSubjectIds,
+    meanings: row.meanings,
+    readings: row.readings,
+    auxiliaryMeanings: row.auxiliaryMeanings,
+    incorrectCount,
+  };
+}
+
+async function sourcesInOrder(userId: number, ids: number[]): Promise<QuizSource[]> {
+  if (ids.length === 0) return [];
+  const rows = await db.select().from(mojiMoriSubjectsTable).where(inArray(mojiMoriSubjectsTable.id, ids));
+  const progress = await progressBySubjectId(userId, ids);
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  return ids.flatMap((id) => {
+    const row = byId.get(id);
+    if (!row) return [];
+    const saved = progress.get(id);
+    return [quizSource(row, saved?.srsStage ?? 0, saved?.incorrectCount ?? 0)];
+  });
+}
+
 export async function extraQueue(userId: number, mode: ExtraMode) {
+  if (mode === "bookmarks") {
+    const marks = await db
+      .select({ subjectId: mojiMoriBookmarksTable.subjectId })
+      .from(mojiMoriBookmarksTable)
+      .where(eq(mojiMoriBookmarksTable.userId, userId))
+      .orderBy(desc(mojiMoriBookmarksTable.createdAt), desc(mojiMoriBookmarksTable.subjectId));
+    return { items: await quizCards(await sourcesInOrder(userId, marks.map((mark) => mark.subjectId))) };
+  }
+  if (mode === "leeches") {
+    const rows = await db
+      .select({ id: mojiMoriProgressTable.subjectId })
+      .from(mojiMoriProgressTable)
+      .where(leechFilter(userId))
+      .orderBy(
+        desc(
+          sql`${mojiMoriProgressTable.meaningIncorrect} + ${mojiMoriProgressTable.readingIncorrect}`,
+        ),
+        asc(mojiMoriProgressTable.subjectId),
+      );
+    return { items: await quizCards(await sourcesInOrder(userId, rows.map((row) => row.id))) };
+  }
   if (mode === "recent-mistakes") {
     const mistakes = await recentMistakes(userId);
     const ids = mistakes.map((item) => item.subjectId);
@@ -1311,11 +1379,13 @@ export async function gradeStudyItem(
   if (fromStage < 1 || fromStage >= COMPLETED_STAGE) throw new Error("Item is not in reviews");
   if (!scored.passed) {
     const dropped = nextStageOnWrong(fromStage, row?.incorrectCount ?? 0);
+    if (row) await rememberWrongUndo(db, userId, subjectId, row);
     await applyStage(userId, subjectId, dropped.stage, dropped.incorrectCount, levelBefore, row?.unlockedAt ?? new Date());
     await writeAttempts(userId, subjectId, "review", subject.objectType, scored, fromStage, dropped.stage);
     return { ...scored, srsStage: dropped.stage, level: levelBefore, leveledUp: false };
   }
   const next = nextStageOnCorrect(fromStage);
+  await clearWrongUndo(db, userId, subjectId);
   await applyStage(userId, subjectId, next, 0, levelBefore, row?.unlockedAt ?? new Date());
   await writeAttempts(userId, subjectId, "review", subject.objectType, scored, fromStage, next);
   const moved = await maybeLevelUp(userId);
@@ -1383,8 +1453,19 @@ export async function acceptReviewPrompt(
     const [row] = await tx
       .select({
         srsStage: mojiMoriProgressTable.srsStage,
+        availableAt: mojiMoriProgressTable.availableAt,
         incorrectCount: mojiMoriProgressTable.incorrectCount,
+        passedAt: mojiMoriProgressTable.passedAt,
+        burnedAt: mojiMoriProgressTable.burnedAt,
         unlockedAt: mojiMoriProgressTable.unlockedAt,
+        meaningCorrect: mojiMoriProgressTable.meaningCorrect,
+        meaningIncorrect: mojiMoriProgressTable.meaningIncorrect,
+        meaningCurrentStreak: mojiMoriProgressTable.meaningCurrentStreak,
+        meaningMaxStreak: mojiMoriProgressTable.meaningMaxStreak,
+        readingCorrect: mojiMoriProgressTable.readingCorrect,
+        readingIncorrect: mojiMoriProgressTable.readingIncorrect,
+        readingCurrentStreak: mojiMoriProgressTable.readingCurrentStreak,
+        readingMaxStreak: mojiMoriProgressTable.readingMaxStreak,
       })
       .from(mojiMoriProgressTable)
       .where(
@@ -1470,6 +1551,8 @@ export async function acceptReviewPrompt(
       ? { stage: nextStageOnCorrect(row.srsStage), incorrectCount: 0 }
       : nextStageOnWrong(row.srsStage, row.incorrectCount);
     const executor = tx as unknown as StudyDb;
+    if (scored.passed) await clearWrongUndo(executor, userId, input.subjectId);
+    else await rememberWrongUndo(executor, userId, input.subjectId, row);
     await applyStage(
       userId,
       input.subjectId,
@@ -1619,6 +1702,155 @@ export async function dropCheckpointTask(userId: number, subjectId: number, prom
       .where(eq(mojiMoriReviewCheckpointsTable.userId, userId));
     return tasks;
   });
+}
+
+type UndoSnapshot = {
+  srsStage: number;
+  availableAt: Date | null;
+  incorrectCount: number;
+  passedAt: Date | null;
+  burnedAt: Date | null;
+  meaningCorrect: number;
+  meaningIncorrect: number;
+  meaningCurrentStreak: number;
+  meaningMaxStreak: number;
+  readingCorrect: number;
+  readingIncorrect: number;
+  readingCurrentStreak: number;
+  readingMaxStreak: number;
+};
+
+function undoColumns(row: UndoSnapshot, gradedAt: Date) {
+  return {
+    srsStage: row.srsStage,
+    availableAt: row.availableAt,
+    incorrectCount: row.incorrectCount,
+    passedAt: row.passedAt,
+    burnedAt: row.burnedAt,
+    meaningCorrect: row.meaningCorrect,
+    meaningIncorrect: row.meaningIncorrect,
+    meaningCurrentStreak: row.meaningCurrentStreak,
+    meaningMaxStreak: row.meaningMaxStreak,
+    readingCorrect: row.readingCorrect,
+    readingIncorrect: row.readingIncorrect,
+    readingCurrentStreak: row.readingCurrentStreak,
+    readingMaxStreak: row.readingMaxStreak,
+    gradedAt,
+  };
+}
+
+async function rememberWrongUndo(
+  executor: StudyDb,
+  userId: number,
+  subjectId: number,
+  row: UndoSnapshot,
+) {
+  const values = undoColumns(row, new Date());
+  await executor
+    .insert(mojiMoriReviewUndoTable)
+    .values({ userId, subjectId, ...values })
+    .onConflictDoUpdate({
+      target: [mojiMoriReviewUndoTable.userId, mojiMoriReviewUndoTable.subjectId],
+      set: values,
+    });
+}
+
+async function clearWrongUndo(executor: StudyDb, userId: number, subjectId: number) {
+  await executor
+    .delete(mojiMoriReviewUndoTable)
+    .where(
+      and(eq(mojiMoriReviewUndoTable.userId, userId), eq(mojiMoriReviewUndoTable.subjectId, subjectId)),
+    );
+}
+
+/** Put the card back where it was before the wrong review. A later correct answer is a new review. */
+export async function undoReviewMistake(userId: number, subjectId: number) {
+  const [subject] = await db
+    .select()
+    .from(mojiMoriSubjectsTable)
+    .where(eq(mojiMoriSubjectsTable.id, subjectId))
+    .limit(1);
+  if (!subject) throw new Error("Not found");
+  const lookup = await componentLookup(subject.componentSubjectIds);
+  const prompts = requiredReviewPrompts(
+    subject.objectType,
+    compositionKanji(subject.componentSubjectIds, (id) => lookup.get(id)).length > 0,
+  );
+  const restored = await db.transaction(async (tx) => {
+    const [snap] = await tx
+      .select()
+      .from(mojiMoriReviewUndoTable)
+      .where(
+        and(eq(mojiMoriReviewUndoTable.userId, userId), eq(mojiMoriReviewUndoTable.subjectId, subjectId)),
+      )
+      .for("update");
+    if (!snap) throw new Error("Nothing to undo");
+    await tx
+      .update(mojiMoriProgressTable)
+      .set({
+        srsStage: snap.srsStage,
+        availableAt: snap.availableAt,
+        incorrectCount: snap.incorrectCount,
+        passedAt: snap.passedAt,
+        burnedAt: snap.burnedAt,
+        meaningCorrect: snap.meaningCorrect,
+        meaningIncorrect: snap.meaningIncorrect,
+        meaningCurrentStreak: snap.meaningCurrentStreak,
+        meaningMaxStreak: snap.meaningMaxStreak,
+        readingCorrect: snap.readingCorrect,
+        readingIncorrect: snap.readingIncorrect,
+        readingCurrentStreak: snap.readingCurrentStreak,
+        readingMaxStreak: snap.readingMaxStreak,
+      })
+      .where(
+        and(eq(mojiMoriProgressTable.userId, userId), eq(mojiMoriProgressTable.subjectId, subjectId)),
+      );
+    await tx
+      .delete(mojiMoriReviewsTable)
+      .where(
+        and(
+          eq(mojiMoriReviewsTable.userId, userId),
+          eq(mojiMoriReviewsTable.subjectId, subjectId),
+          eq(mojiMoriReviewsTable.kind, "review"),
+          gte(mojiMoriReviewsTable.createdAt, new Date(snap.gradedAt.getTime() - 5000)),
+        ),
+      );
+    await tx
+      .delete(mojiMoriOpenPromptsTable)
+      .where(
+        and(
+          eq(mojiMoriOpenPromptsTable.userId, userId),
+          eq(mojiMoriOpenPromptsTable.subjectId, subjectId),
+        ),
+      );
+    await tx
+      .delete(mojiMoriReviewUndoTable)
+      .where(
+        and(eq(mojiMoriReviewUndoTable.userId, userId), eq(mojiMoriReviewUndoTable.subjectId, subjectId)),
+      );
+    const [checkpoint] = await tx
+      .select()
+      .from(mojiMoriReviewCheckpointsTable)
+      .where(eq(mojiMoriReviewCheckpointsTable.userId, userId))
+      .for("update");
+    if (checkpoint) {
+      const present = new Set(
+        checkpoint.tasks.filter((task) => task.subjectId === subjectId).map((task) => task.prompt),
+      );
+      const added: MojiMoriCheckpointTask[] = prompts
+        .filter((prompt) => !present.has(prompt))
+        .map((prompt) => ({ subjectId, prompt, expectedStage: snap.srsStage }));
+      if (added.length > 0) {
+        await tx
+          .update(mojiMoriReviewCheckpointsTable)
+          .set({ tasks: [...checkpoint.tasks, ...added], updatedAt: new Date() })
+          .where(eq(mojiMoriReviewCheckpointsTable.userId, userId));
+      }
+    }
+    return { srsStage: snap.srsStage, availableAt: snap.availableAt };
+  });
+  await refreshDependents(userId, subjectId);
+  return restored;
 }
 
 async function applyStage(
@@ -1773,6 +2005,14 @@ export async function studySnapshot(userId: number) {
     .select({ count: sql<number>`count(*)::int` })
     .from(mojiMoriProgressTable)
     .where(and(eq(mojiMoriProgressTable.userId, userId), gte(mojiMoriProgressTable.srsStage, COMPLETED_STAGE)));
+  const [bookmarks] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(mojiMoriBookmarksTable)
+    .where(eq(mojiMoriBookmarksTable.userId, userId));
+  const [leeches] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(mojiMoriProgressTable)
+    .where(leechFilter(userId));
   const activity = await activityBuckets(userId);
   const mistakes = await recentMistakes(userId);
   return {
@@ -1803,11 +2043,14 @@ export async function studySnapshot(userId: number) {
       recentLessons: Number(recentLessons?.count ?? 0),
       recentMistakes: mistakes.length,
       cooked: Number(cooked?.count ?? 0),
+      bookmarks: Number(bookmarks?.count ?? 0),
+      leeches: Number(leeches?.count ?? 0),
     },
     completed: periodStats(activity, now, false),
     accuracy: periodStats(activity, now, true),
     reviewDays: reviewDays(activity, now),
     heatmap: heatmapFrom(activity, now),
+    week: await weeklyReport(userId, settings.level, now),
     lists: await itemLists(userId),
     streak: streakFrom(activity, now),
   };
@@ -1989,6 +2232,12 @@ function reviewDays(logs: ActivityBucket[], now: Date) {
   return days;
 }
 
+function startOfWeek(date: Date) {
+  const start = startOfDay(date);
+  const sinceMonday = (start.getDay() + 6) % 7;
+  return addDays(start, -sinceMonday);
+}
+
 function heatmapFrom(logs: ActivityBucket[], now: Date) {
   const counts = new Map<string, number>();
   for (const row of logs) {
@@ -1996,11 +2245,50 @@ function heatmapFrom(logs: ActivityBucket[], now: Date) {
     const key = dateKey(row.at);
     counts.set(key, (counts.get(key) ?? 0) + row.total);
   }
-  const start = addDays(startOfDay(now), -364);
-  return Array.from({ length: 365 }, (_, index) => {
-    const date = dateKey(addDays(start, index));
-    return { date, count: counts.get(date) ?? 0 };
-  });
+  const start = startOfWeek(addDays(startOfDay(now), -364));
+  const end = startOfDay(now);
+  const days: { date: string; count: number }[] = [];
+  for (let cursor = start; cursor <= end; cursor = addDays(cursor, 1)) {
+    const date = dateKey(cursor);
+    days.push({ date, count: counts.get(date) ?? 0 });
+  }
+  return days;
+}
+
+async function weeklyReport(userId: number, level: number, now: Date) {
+  const start = startOfWeek(now);
+  const started = await db
+    .select({ level: mojiMoriSubjectsTable.level })
+    .from(mojiMoriProgressTable)
+    .innerJoin(
+      mojiMoriSubjectsTable,
+      eq(mojiMoriProgressTable.subjectId, mojiMoriSubjectsTable.id),
+    )
+    .where(
+      and(
+        eq(mojiMoriProgressTable.userId, userId),
+        gte(mojiMoriProgressTable.srsStage, 1),
+        gte(mojiMoriProgressTable.startedAt, start),
+      ),
+    );
+  const [reviews] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(mojiMoriReviewsTable)
+    .where(
+      and(
+        eq(mojiMoriReviewsTable.userId, userId),
+        eq(mojiMoriReviewsTable.kind, "review"),
+        eq(mojiMoriReviewsTable.prompt, "meaning"),
+        gte(mojiMoriReviewsTable.createdAt, start),
+      ),
+    );
+  const levels = [...new Set(started.map((row) => row.level))].sort((a, b) => a - b);
+  return {
+    newCards: started.length,
+    reviews: Number(reviews?.count ?? 0),
+    level,
+    levels,
+  };
 }
 
 function streakFrom(logs: ActivityBucket[], now: Date) {

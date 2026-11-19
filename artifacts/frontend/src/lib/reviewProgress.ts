@@ -240,6 +240,15 @@ if (typeof window !== "undefined") {
   });
 }
 
+export async function undoPersistedReview(subjectId: number) {
+  const response = await apiFetch("/api/mojimori/study/reviews/undo", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ subjectId }),
+  });
+  if (!response.ok) throw new Error("Could not undo review");
+}
+
 export async function readReviewResume() {
   const response = await apiFetch("/api/mojimori/study/resume");
   if (!response.ok) throw new Error("Could not load saved progress");

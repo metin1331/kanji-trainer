@@ -292,7 +292,11 @@ export function useMojiMoriExtra(mode: string, enabled = true) {
     ...mojiMoriExtraQuery(mode),
     enabled:
       enabled &&
-      (mode === "recent-lessons" || mode === "recent-mistakes" || mode === "cooked"),
+      (mode === "recent-lessons" ||
+        mode === "recent-mistakes" ||
+        mode === "cooked" ||
+        mode === "bookmarks" ||
+        mode === "leeches"),
   });
 }
 

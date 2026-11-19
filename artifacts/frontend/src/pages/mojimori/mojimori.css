@@ -4,6 +4,11 @@
   --color-ice: #eff8ff;
   --color-sky: #bde7ff;
   --color-azure: #75c8ff;
+  --moji-heat-0: color-mix(in srgb, var(--color-azure) 16%, var(--color-ice));
+  --moji-heat-1: color-mix(in srgb, var(--color-azure) 40%, white);
+  --moji-heat-2: color-mix(in srgb, var(--color-azure) 68%, white);
+  --moji-heat-3: var(--color-azure);
+  --moji-heat-4: color-mix(in srgb, var(--color-azure) 58%, #0c4a7a);
   --color-periwinkle: #dcdfff;
   --color-ink: #1e293b;
   --color-muted: #64748b;
@@ -125,6 +130,11 @@
   --color-glass: rgba(16, 20, 32, 0.72);
   --color-line: rgba(186, 204, 232, 0.18);
   --color-ice: #1a2436;
+  --moji-heat-0: color-mix(in srgb, var(--color-azure) 12%, var(--color-ice));
+  --moji-heat-1: color-mix(in srgb, var(--color-azure) 34%, var(--color-ice));
+  --moji-heat-2: color-mix(in srgb, var(--color-azure) 62%, var(--color-ice));
+  --moji-heat-3: var(--color-azure);
+  --moji-heat-4: color-mix(in srgb, var(--color-azure) 52%, white);
   --color-canvas: #0f1117;
   --glass-bg-start: rgba(24, 30, 46, 0.9);
   --glass-bg-end: rgba(16, 20, 32, 0.74);
@@ -2281,31 +2291,158 @@ button.forecast-row {
   animation: moji-shake 220ms ease;
 }
 
-.moji-heat {
+.moji-week {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 0.85rem 0 0;
+}
+
+.moji-week div {
+  min-width: 0;
+}
+
+.moji-week dt {
+  color: var(--color-muted);
+  font-size: 0.75rem;
+  font-weight: 650;
+}
+
+.moji-week dd {
+  margin: 0.15rem 0 0;
+  font-size: 1.65rem;
+  font-weight: 650;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+}
+
+.moji-heat-board {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas:
+    ". months"
+    "days cells";
+  gap: 0.35rem 0.4rem;
+  width: max-content;
+  min-width: 100%;
+}
+
+.moji-heat-months {
+  grid-area: months;
   display: grid;
   grid-auto-flow: column;
-  grid-template-rows: repeat(7, 10px);
-  gap: 2px;
+  grid-auto-columns: 12px;
+  gap: 3px;
+  height: 0.9rem;
+  color: var(--color-muted);
+  font-size: 0.65rem;
+  line-height: 1;
 }
 
-.moji-heat i {
-  width: 10px;
-  height: 10px;
-  border-radius: 2px;
-  background: #e6eaf2;
+.moji-heat-months span {
+  overflow: visible;
+  white-space: nowrap;
 }
 
-.moji-heat i[data-level="1"] {
-  background: #c9d7f2;
+.moji-heat-days {
+  grid-area: days;
+  display: grid;
+  grid-template-rows: repeat(7, 12px);
+  gap: 3px;
+  color: var(--color-muted);
+  font-size: 0.62rem;
+  line-height: 12px;
 }
-.moji-heat i[data-level="2"] {
-  background: #8eafef;
+
+.moji-heat {
+  grid-area: cells;
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(7, 12px);
+  grid-auto-columns: 12px;
+  gap: 3px;
 }
-.moji-heat i[data-level="3"] {
-  background: #4f86e0;
+
+.moji-heat__cell {
+  width: 12px;
+  height: 12px;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: var(--moji-heat-0);
 }
-.moji-heat i[data-level="4"] {
-  background: #2f5fbe;
+
+button.moji-heat__cell {
+  cursor: pointer;
+}
+
+.moji-heat__cell[data-level="1"] {
+  background: var(--moji-heat-1);
+}
+.moji-heat__cell[data-level="2"] {
+  background: var(--moji-heat-2);
+}
+.moji-heat__cell[data-level="3"] {
+  background: var(--moji-heat-3);
+}
+.moji-heat__cell[data-level="4"] {
+  background: var(--moji-heat-4);
+}
+
+.moji-heat__cell.is-future {
+  background: transparent;
+}
+
+.moji-heat__cell.is-today {
+  box-shadow: inset 0 0 0 1px var(--color-ink);
+}
+
+.moji-heat__cell.is-locked {
+  outline: 2px solid var(--color-ink);
+  outline-offset: 1px;
+}
+
+.moji-heat-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-height: 1.25rem;
+  margin-top: 0.75rem;
+  color: var(--color-muted);
+  font-size: 0.8rem;
+}
+
+.moji-heat-foot p {
+  margin: 0;
+}
+
+.moji-heat-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-left: auto;
+}
+
+.moji-heat-legend i {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  background: var(--moji-heat-0);
+}
+
+.moji-heat-legend i[data-level="1"] {
+  background: var(--moji-heat-1);
+}
+.moji-heat-legend i[data-level="2"] {
+  background: var(--moji-heat-2);
+}
+.moji-heat-legend i[data-level="3"] {
+  background: var(--moji-heat-3);
+}
+.moji-heat-legend i[data-level="4"] {
+  background: var(--moji-heat-4);
 }
 
 .moji-user-menu {
@@ -2643,6 +2780,8 @@ button.forecast-row {
 .mm-quiz__stage-tools {
   display: inline-flex;
   align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 0.35rem;
 }
 
@@ -2669,6 +2808,14 @@ button.forecast-row {
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.28);
   cursor: pointer;
+}
+
+.mm-quiz__home.mm-quiz__home--text {
+  width: auto;
+  padding: 0 0.7rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .mm-stroke-glyph-trigger {
@@ -3469,6 +3616,9 @@ button.forecast-row {
   .mm-quiz__home {
     width: 2rem;
     height: 2rem;
+  }
+  .mm-quiz__home.mm-quiz__home--text {
+    width: auto;
   }
   .mm-quiz__stats {
     font-size: 0.82rem;

@@ -239,7 +239,13 @@ async function warm(dest: string, client: QueryClient) {
   }
   if (path === "/mojimori/extra") {
     const mode = search.get("mode") ?? "recent-lessons";
-    if (mode === "recent-lessons" || mode === "recent-mistakes" || mode === "cooked") {
+    if (
+      mode === "recent-lessons" ||
+      mode === "recent-mistakes" ||
+      mode === "cooked" ||
+      mode === "bookmarks" ||
+      mode === "leeches"
+    ) {
       await client.prefetchQuery(mojiMoriExtraQuery(mode));
     }
   }
@@ -310,7 +316,15 @@ function ready(dest: string, client: QueryClient) {
   }
   if (path === "/mojimori/extra") {
     const mode = search.get("mode") ?? "recent-lessons";
-    if (mode !== "recent-lessons" && mode !== "recent-mistakes" && mode !== "cooked") return true;
+    if (
+      mode !== "recent-lessons" &&
+      mode !== "recent-mistakes" &&
+      mode !== "cooked" &&
+      mode !== "bookmarks" &&
+      mode !== "leeches"
+    ) {
+      return true;
+    }
     return isFresh(client, mojiMoriExtraQuery(mode).queryKey);
   }
   return true;
