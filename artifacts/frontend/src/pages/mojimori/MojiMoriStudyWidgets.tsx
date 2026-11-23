@@ -133,7 +133,7 @@ function Heatmap({
   const yearTotal = cells.reduce((sum, cell) => sum + cell.count, 0);
   const selected = cells.find((cell) => cell.date === lockedDate);
   return (
-    <section className="glass-panel p-5">
+    <section className="heatmap glass-panel p-5">
       <div className="mb-3 flex items-baseline justify-between gap-3">
         <h2 className="text-lg font-semibold sm:text-base">
           {t("mojimori.study.heatmap")}
@@ -142,7 +142,7 @@ function Heatmap({
           {t("mojimori.study.heatTotal", { count: yearTotal })}
         </p>
       </div>
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto pb-2.5">
         <div className="moji-heat-board">
           <div className="moji-heat-months" aria-hidden="true">
             {months.map((month, index) => (
